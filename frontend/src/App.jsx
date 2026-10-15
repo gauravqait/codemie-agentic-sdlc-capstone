@@ -1,4 +1,4 @@
-import { useCallback, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
 import Toast from './components/Toast.jsx';
 
@@ -34,15 +34,6 @@ function safeSaveTasks(nextTasks) {
 }
 
 export default function App() {
-  const titleId = useId();
-  const descriptionId = useId();
-  const statusId = useId();
-  const priorityId = useId();
-  const dueDateId = useId();
-
-  const titleErrorId = useId();
-  const dueDateErrorId = useId();
-
   const titleInputRef = useRef(null);
   const dueDateInputRef = useRef(null);
 
@@ -58,7 +49,7 @@ export default function App() {
     q: '',
     status: 'All',
     priority: 'All',
-    sort: 'updatedAt',
+    sort: 'createdAtDesc',
   });
 
   const [confirm, setConfirm] = useState({
@@ -79,7 +70,6 @@ export default function App() {
   });
 
   const [pendingStatusChange, setPendingStatusChange] = useState(null);
-  const [pendingDelete, setPendingDelete] = useState(null);
 
   const applyAndPersistTasks = useCallback((updater) => {
     setTasks((prev) => {
@@ -91,7 +81,15 @@ export default function App() {
 
   const validate = useCallback(
     (nextForm = form) => {
-      const nextErrors = validateTaskForm?.(nextForm) ?? {};
+      const values = {
+        title: nextForm?.title ?? '',
+        description: nextForm?.description ?? '',
+        status: nextForm?.status ?? 'To Do',
+        priority: nextForm?.priority ?? 'Medium',
+        dueDate: nextForm?.dueDate ?? '',
+      };
+
+      const nextErrors = validateTaskForm?.(values) ?? {};
       setErrors(nextErrors);
       return nextErrors;
     },
@@ -114,7 +112,6 @@ export default function App() {
       setForm((prev) => ({ ...prev, status: pendingStatusChange.previousStatus }));
       setPendingStatusChange(null);
     }
-    setPendingDelete(null);
     setConfirm((c) => ({ ...c, open: false, onConfirm: null }));
   }, [pendingStatusChange]);
 
@@ -169,11 +166,8 @@ export default function App() {
       const fromStatus = currentTask?.status;
       const toStatus = trimmed.status;
 
-      const needsConfirm =
-        !!editingId &&
-        fromStatus != null &&
-        toStatus != null &&
-        checkTransition?.(fromStatus, toStatus) === 'confirm';
+      const transition = fromStatus != null && toStatus != null ? checkTransition?.(fromStatus, toStatus) : null;
+      const needsConfirm = !!editingId && !!transition?.requiresConfirm;
 
       if (needsConfirm) {
         setPendingStatusChange({ previousStatus: fromStatus, nextStatus: toStatus });
@@ -192,6 +186,17 @@ export default function App() {
             reset();
             titleInputRef.current?.focus();
           },
+        });
+        return;
+      }
+
+      if (transition && transition.allowed === false) {
+        setToast({
+          open: true,
+          message: 'That status change is not allowed.',
+          actionLabel: '',
+          durationMs: 4000,
+          onAction: null,
         });
         return;
       }
@@ -246,7 +251,6 @@ export default function App() {
     (task) => {
       if (!task) return;
 
-      setPendingDelete(task);
       setConfirm({
         open: true,
         title: 'Delete task?',
@@ -270,7 +274,6 @@ export default function App() {
             },
           });
 
-          setPendingDelete(null);
           setConfirm((c) => ({ ...c, open: false, onConfirm: null }));
         },
       });
@@ -343,39 +346,37 @@ export default function App() {
               onChange={(e) => setQuery((prev) => ({ ...prev, sort: e.target.value }))}
               aria-label="Sort by"
             >
-              <option value="updatedAt">Updated</option>
-              <option value="createdAt">Created</option>
-              <option value="dueDate">Due date</option>
-              <option value="priority">Priority</option>
-              <option value="status">Status</option>
-              <option value="title">Title</option>
+              <option value="createdAtDesc">Created (newest)</option>
+              <option value="dueDateAsc">Due date (soonest)</option>
+              <option value="priorityDesc">Priority (highest)</option>
+              <option value="titleAsc">Title (A–Z)</option>
+              <option value="statusAsc">Status (A–Z)</option>
             </select>
           </label>
         </div>
       </section>
 
       <form onSubmit={submit} aria-label="Task form" noValidate>
-        <label htmlFor={titleId}>Title</label>
+        <label>Title</label>
         <input
-          id={titleId}
           ref={titleInputRef}
           value={form.title}
           onChange={change('title')}
           onBlur={onBlur('title')}
           aria-invalid={showTitleError ? 'true' : 'false'}
-          aria-describedby={showTitleError ? titleErrorId : undefined}
+          aria-describedby={showTitleError ? 'title-error' : undefined}
         />
         {showTitleError && (
-          <p id={titleErrorId} role="alert">
+          <p id="title-error" role="alert">
             {errors.title}
           </p>
         )}
 
-        <label htmlFor={descriptionId}>Description</label>
-        <textarea id={descriptionId} value={form.description} onChange={change('description')} />
+        <label>Description</label>
+        <textarea value={form.description} onChange={change('description')} />
 
-        <label htmlFor={statusId}>Status</label>
-        <select id={statusId} value={form.status} onChange={change('status')}>
+        <label>Status</label>
+        <select value={form.status} onChange={change('status')}>
           {STATUSES.map((s) => (
             <option key={s} value={s}>
               {s}
@@ -383,8 +384,8 @@ export default function App() {
           ))}
         </select>
 
-        <label htmlFor={priorityId}>Priority</label>
-        <select id={priorityId} value={form.priority} onChange={change('priority')}>
+        <label>Priority</label>
+        <select value={form.priority} onChange={change('priority')}>
           {PRIORITIES.map((p) => (
             <option key={p} value={p}>
               {p}
@@ -392,19 +393,18 @@ export default function App() {
           ))}
         </select>
 
-        <label htmlFor={dueDateId}>Due date</label>
+        <label>Due date</label>
         <input
-          id={dueDateId}
           ref={dueDateInputRef}
           type="date"
           value={form.dueDate}
           onChange={change('dueDate')}
           onBlur={onBlur('dueDate')}
           aria-invalid={showDueDateError ? 'true' : 'false'}
-          aria-describedby={showDueDateError ? dueDateErrorId : undefined}
+          aria-describedby={showDueDateError ? 'dueDate-error' : undefined}
         />
         {showDueDateError && (
-          <p id={dueDateErrorId} role="alert">
+          <p id="dueDate-error" role="alert">
             {errors.dueDate}
           </p>
         )}
@@ -452,7 +452,6 @@ export default function App() {
         cancelText={confirm.cancelLabel}
         onConfirm={() => confirm.onConfirm?.()}
         onCancel={closeConfirm}
-        onClose={closeConfirm}
       />
 
       <Toast
