@@ -347,7 +347,12 @@ export default function App() {
 
           <label>
             Sort
-            <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort tasks">
+            <select
+              data-testid="sort-select"
+              value={sort}
+              onChange={(e) => setSort(e.target.value)}
+              aria-label="Sort tasks"
+            >
               <option value="updatedDesc">Recently updated</option>
               <option value="createdDesc">Recently created</option>
               <option value="titleAsc">Title (A–Z)</option>
