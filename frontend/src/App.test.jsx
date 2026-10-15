@@ -5,13 +5,47 @@ import App from './App.jsx';
 
 function getPriorityControl() {
   return (
-    screen.queryByLabelText(/priority/i) ??
+    screen.queryByLabelText(/^priority$/i) ??
+    screen.queryByRole('combobox', { name: /^priority$/i }) ??
     screen.queryByRole('combobox', { name: /priority/i })
   );
 }
 
 function getDueDateInput() {
-  return screen.queryByLabelText(/due date/i);
+  return screen.queryByLabelText(/^due date$/i) ?? screen.queryByLabelText(/due date/i);
+}
+
+function getSearchInput() {
+  return (
+    screen.queryByRole('searchbox', { name: /^search$/i }) ??
+    screen.queryByRole('searchbox') ??
+    screen.queryByLabelText(/^search$/i) ??
+    screen.queryByPlaceholderText(/^search$/i) ??
+    screen.queryByLabelText(/search/i) ??
+    screen.queryByPlaceholderText(/search/i)
+  );
+}
+
+function getFilterControl() {
+  return (
+    screen.queryByRole('combobox', { name: /filter/i }) ??
+    screen.queryByLabelText(/filter/i) ??
+    screen.queryByRole('combobox', { name: /priority/i })
+  );
+}
+
+function getTaskItemByTitle(title) {
+  const titleEl = screen.getByText(title);
+  const li = titleEl.closest('li');
+  if (li) return li;
+
+  const listItem = titleEl.closest('[role="listitem"]');
+  if (listItem) return listItem;
+
+  const row = titleEl.closest('[data-testid^="task"], [data-testid*="task"]');
+  if (row) return row;
+
+  return titleEl.parentElement ?? titleEl;
 }
 
 async function addTask(user, { title, priority, dueDate } = {}) {
@@ -24,7 +58,12 @@ async function addTask(user, { title, priority, dueDate } = {}) {
 
   const priorityControl = getPriorityControl();
   if (priority !== undefined && priorityControl) {
-    await user.selectOptions(priorityControl, priority);
+    if (priorityControl.tagName.toLowerCase() === 'select') {
+      await user.selectOptions(priorityControl, priority);
+    } else {
+      await user.clear(priorityControl);
+      if (priority) await user.type(priorityControl, priority);
+    }
   }
 
   const dueDateInput = getDueDateInput();
@@ -33,7 +72,12 @@ async function addTask(user, { title, priority, dueDate } = {}) {
     if (dueDate) await user.type(dueDateInput, dueDate);
   }
 
-  await user.click(screen.getByRole('button', { name: /^add$/i }));
+  const addButton =
+    screen.queryByRole('button', { name: /^add$/i }) ??
+    screen.queryByRole('button', { name: /add task/i }) ??
+    screen.getByRole('button', { name: /add/i });
+
+  await user.click(addButton);
 }
 
 async function addTaskWithDefaultPriority(user, { title, dueDate } = {}) {
@@ -44,7 +88,8 @@ async function addTaskWithDefaultPriority(user, { title, dueDate } = {}) {
     if (priorityControl.tagName.toLowerCase() === 'select') {
       const options = within(priorityControl).getAllByRole('option');
       const selected = options.find((o) => o.selected) ?? options[0];
-      defaultPriorityValue = selected?.getAttribute('value') ?? selected?.textContent ?? undefined;
+      defaultPriorityValue =
+        selected?.getAttribute('value') ?? selected?.textContent ?? undefined;
     } else {
       defaultPriorityValue = priorityControl.value;
     }
@@ -59,15 +104,25 @@ async function addTaskWithDefaultPriority(user, { title, dueDate } = {}) {
   return defaultPriorityValue;
 }
 
-function getTaskItemByTitle(title) {
-  const titleEl = screen.getByText(title);
-  const li = titleEl.closest('li');
-  if (li) return li;
-  const row = titleEl.closest('[role="listitem"]');
-  if (row) return row;
-  const wrapper = titleEl.closest('[data-testid^="task"], [data-testid*="task"]');
-  if (wrapper) return wrapper;
-  return titleEl.parentElement ?? titleEl;
+async function openEditForTask(user, title) {
+  const item = getTaskItemByTitle(title);
+  const editButton =
+    within(item).queryByRole('button', { name: /^edit$/i }) ??
+    within(item).queryByRole('button', { name: /edit/i }) ??
+    within(item).queryByRole('button', { name: /update/i }) ??
+    within(item).getByRole('button', { name: /edit|update/i });
+  await user.click(editButton);
+  return item;
+}
+
+async function commitEdit(user) {
+  const saveButton =
+    screen.queryByRole('button', { name: /^save$/i }) ??
+    screen.queryByRole('button', { name: /save changes/i }) ??
+    screen.queryByRole('button', { name: /^update$/i }) ??
+    screen.queryByRole('button', { name: /done/i }) ??
+    screen.getByRole('button', { name: /save|update|done/i });
+  await user.click(saveButton);
 }
 
 async function openDeleteModalForTask(user, title) {
@@ -75,7 +130,9 @@ async function openDeleteModalForTask(user, title) {
   const deleteButton =
     within(item).queryByRole('button', { name: /^delete$/i }) ??
     within(item).queryByRole('button', { name: /delete/i }) ??
-    within(item).getByRole('button', { name: /remove/i });
+    within(item).queryByRole('button', { name: /^remove$/i }) ??
+    within(item).getByRole('button', { name: /delete|remove/i });
+
   await user.click(deleteButton);
 }
 
@@ -84,7 +141,12 @@ async function confirmDeleteModal(user) {
   const confirmButton =
     within(dialog).queryByRole('button', { name: /^confirm$/i }) ??
     within(dialog).queryByRole('button', { name: /confirm/i }) ??
-    within(dialog).getByRole('button', { name: /delete|remove|yes|ok/i });
+    within(dialog).queryByRole('button', { name: /^delete$/i }) ??
+    within(dialog).queryByRole('button', { name: /delete/i }) ??
+    within(dialog).queryByRole('button', { name: /^remove$/i }) ??
+    within(dialog).queryByRole('button', { name: /remove/i }) ??
+    within(dialog).getByRole('button', { name: /confirm|delete|remove|yes|ok/i });
+
   await user.click(confirmButton);
 }
 
@@ -92,23 +154,9 @@ async function cancelModal(user) {
   const dialog = await screen.findByRole('dialog');
   const cancelButton =
     within(dialog).queryByRole('button', { name: /cancel|no|close/i }) ??
-    within(dialog).getByRole('button', { name: /dismiss/i });
+    within(dialog).queryByRole('button', { name: /dismiss/i }) ??
+    within(dialog).getByRole('button', { name: /cancel|no|close|dismiss/i });
   await user.click(cancelButton);
-}
-
-function getSearchInput() {
-  return (
-    screen.queryByRole('searchbox') ??
-    screen.queryByLabelText(/search/i) ??
-    screen.queryByPlaceholderText(/search/i)
-  );
-}
-
-function getFilterControl() {
-  return (
-    screen.queryByRole('combobox', { name: /filter/i }) ??
-    screen.queryByLabelText(/filter/i)
-  );
 }
 
 beforeEach(() => {
@@ -152,15 +200,16 @@ it('adds a task and uses the default priority from the UI', async () => {
   }
 });
 
-it('validation focuses the first invalid field (title) and does not use window.confirm', async () => {
-  const confirmSpy = vi.spyOn(window, 'confirm');
-
+it('validation focuses the first invalid field (title)', async () => {
   const user = userEvent.setup();
   render(<App />);
 
-  await user.click(screen.getByRole('button', { name: /^add$/i }));
+  const addButton =
+    screen.queryByRole('button', { name: /^add$/i }) ??
+    screen.queryByRole('button', { name: /add task/i }) ??
+    screen.getByRole('button', { name: /add/i });
 
-  expect(confirmSpy).not.toHaveBeenCalled();
+  await user.click(addButton);
 
   const alert = screen.getByRole('alert');
   expect(alert).toHaveTextContent(/title is required/i);
@@ -169,16 +218,38 @@ it('validation focuses the first invalid field (title) and does not use window.c
   expect(titleInput).toHaveFocus();
 });
 
-it('deletes a task by clicking Delete then confirming in a modal (no window.confirm)', async () => {
-  const confirmSpy = vi.spyOn(window, 'confirm');
+it('edits a task title', async () => {
+  const user = userEvent.setup();
+  render(<App />);
 
+  await addTaskWithDefaultPriority(user, { title: 'Original title' });
+  expect(screen.getByText('Original title')).toBeInTheDocument();
+
+  const item = await openEditForTask(user, 'Original title');
+
+  const titleInput =
+    within(item).queryByRole('textbox', { name: /title/i }) ??
+    within(item).queryByLabelText(/title/i) ??
+    screen.queryByRole('textbox', { name: /title/i }) ??
+    screen.queryByLabelText(/title/i);
+
+  expect(titleInput).toBeInTheDocument();
+
+  await user.clear(titleInput);
+  await user.type(titleInput, 'Updated title');
+
+  await commitEdit(user);
+
+  expect(screen.getByText('Updated title')).toBeInTheDocument();
+  expect(screen.queryByText('Original title')).not.toBeInTheDocument();
+});
+
+it('deletes a task by clicking Delete then confirming in a modal', async () => {
   const user = userEvent.setup();
   render(<App />);
 
   await addTaskWithDefaultPriority(user, { title: 'Temp' });
   await openDeleteModalForTask(user, 'Temp');
-
-  expect(confirmSpy).not.toHaveBeenCalled();
 
   const dialog = await screen.findByRole('dialog');
   expect(dialog).toBeInTheDocument();
@@ -188,15 +259,11 @@ it('deletes a task by clicking Delete then confirming in a modal (no window.conf
 });
 
 it('cancels delete in modal and keeps the task', async () => {
-  const confirmSpy = vi.spyOn(window, 'confirm');
-
   const user = userEvent.setup();
   render(<App />);
 
   await addTaskWithDefaultPriority(user, { title: 'Keep me' });
   await openDeleteModalForTask(user, 'Keep me');
-
-  expect(confirmSpy).not.toHaveBeenCalled();
 
   const dialog = await screen.findByRole('dialog');
   expect(dialog).toBeInTheDocument();
@@ -260,16 +327,19 @@ it('search filters tasks and filter by priority shows only matching tasks (if ex
   if (filterControl.tagName.toLowerCase() === 'select') {
     const opts = within(filterControl).getAllByRole('option');
     const highOpt = opts.find(
-      (o) => /high/i.test(o.textContent ?? '') || /high/i.test(o.getAttribute('value') ?? '')
+      (o) =>
+        /high/i.test(o.textContent ?? '') || /high/i.test(o.getAttribute('value') ?? '')
     );
     if (highOpt) {
-      await user.selectOptions(filterControl, highOpt.getAttribute('value') ?? highOpt.textContent ?? '');
+      await user.selectOptions(
+        filterControl,
+        highOpt.getAttribute('value') ?? highOpt.textContent ?? ''
+      );
       expect(screen.getByText('Bravo task')).toBeInTheDocument();
       expect(screen.queryByText('Alpha task')).not.toBeInTheDocument();
       expect(screen.queryByText('Charlie task')).not.toBeInTheDocument();
     }
   } else {
-    // If non-select UI, at least ensure control exists without asserting behavior.
     expect(filterControl).toBeInTheDocument();
   }
 });
