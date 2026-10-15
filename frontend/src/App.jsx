@@ -1,13 +1,12 @@
-import { useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useId, useMemo, useRef, useState } from 'react';
 import ConfirmDialog from './components/ConfirmDialog';
 import Toast from './components/Toast';
 
-import { PRIORITIES, STATUSES } from './domain/constants';
-import { createTask, updateTask } from './domain/tasks';
-import { loadTasks, saveTasks } from './storage/tasksStorage';
-import { selectVisibleTasks } from './selectors/tasksSelectors';
-import { validateTaskDraft } from './validation/taskValidation';
-import { shouldConfirmDoneToInProgress } from './transitions/taskTransitions';
+import { PRIORITIES, STATUSES, createTask, updateTask } from './domain/taskModel.js';
+import { validateTaskDraft } from './domain/taskValidation.js';
+import { selectVisibleTasks } from './domain/taskSelectors.js';
+import { shouldConfirmDoneToInProgress } from './domain/taskTransitions.js';
+import { loadTasks, saveTasks } from './storage/tasksStorage.js';
 
 const EMPTY = {
   title: '',
@@ -81,127 +80,147 @@ export default function App() {
   const [pendingStatusChange, setPendingStatusChange] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
 
-  function applyAndPersistTasks(updater) {
+  const applyAndPersistTasks = useCallback((updater) => {
     setTasks((prev) => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
       safeSaveTasks(next);
       return next;
     });
-  }
+  }, []);
 
-  function validate(nextForm = form) {
-    const nextErrors = validateTaskDraft?.(nextForm) ?? { title: '', dueDate: '' };
-    setErrors(nextErrors);
-    return nextErrors;
-  }
+  const validate = useCallback(
+    (nextForm = form) => {
+      const nextErrors = validateTaskDraft?.(nextForm) ?? { title: '', dueDate: '' };
+      setErrors(nextErrors);
+      return nextErrors;
+    },
+    [form]
+  );
 
-  function focusFirstError(nextErrors) {
+  const focusFirstError = useCallback((nextErrors) => {
     if (nextErrors?.title) {
       titleInputRef.current?.focus();
       return;
     }
     if (nextErrors?.dueDate) {
       dueDateInputRef.current?.focus?.();
-      return;
     }
-  }
+  }, []);
 
-  const change = (field) => (e) => {
-    const value = e.target.value;
-
-    if (field === 'status') {
-      const nextStatus = value;
-
-      if (editingId) {
-        const currentTask = tasks.find((t) => t.id === editingId);
-        const previousStatus = currentTask?.status ?? form.status;
-
-        const needsConfirm =
-          shouldConfirmDoneToInProgress?.(previousStatus, nextStatus) ??
-          (previousStatus === 'Done' && nextStatus === 'In Progress');
-
-        if (needsConfirm) {
-          setPendingStatusChange({ previousStatus, nextStatus });
-          setConfirm({
-            open: true,
-            title: 'Move task back to In Progress?',
-            message: 'This task is marked Done. Are you sure you want to move it back to In Progress?',
-            confirmLabel: 'Yes, move',
-            cancelLabel: 'Keep Done',
-            onConfirm: () => {
-              setForm((prev) => ({ ...prev, status: 'In Progress' }));
-              setPendingStatusChange(null);
-              setConfirm((c) => ({ ...c, open: false, onConfirm: null }));
-            },
-          });
-          return;
-        }
-      }
+  const closeConfirm = useCallback(() => {
+    if (pendingStatusChange) {
+      setForm((prev) => ({ ...prev, status: pendingStatusChange.previousStatus }));
+      setPendingStatusChange(null);
     }
+    setPendingDelete(null);
+    setConfirm((c) => ({ ...c, open: false, onConfirm: null }));
+  }, [pendingStatusChange]);
 
-    const next = { ...form, [field]: value };
-    setForm(next);
-
-    if (field === 'title' || field === 'dueDate') {
-      setTouched((t) => ({ ...t, [field]: true }));
-      validate(next);
-    }
-  };
-
-  const onBlur = (field) => () => {
-    setTouched((t) => ({ ...t, [field]: true }));
-    validate();
-  };
-
-  function reset() {
+  const reset = useCallback(() => {
     setForm(EMPTY);
     setEditingId(null);
     setTouched({ title: false, dueDate: false });
     setErrors({ title: '', dueDate: '' });
-  }
+  }, []);
 
-  function submit(e) {
-    e.preventDefault();
+  const change = useCallback(
+    (field) => (e) => {
+      const value = e.target.value;
 
-    const trimmed = { ...form, title: (form.title ?? '').trim() };
-    const nextErrors = validate(trimmed);
-    setTouched({ title: true, dueDate: true });
+      if (field === 'status') {
+        const nextStatus = value;
 
-    if (nextErrors.title || nextErrors.dueDate) {
-      focusFirstError(nextErrors);
-      return;
-    }
+        if (editingId) {
+          const currentTask = tasks.find((t) => t.id === editingId);
+          const previousStatus = currentTask?.status ?? form.status;
 
-    if (editingId) {
-      const updated = updateTask?.(tasks, editingId, trimmed) ?? null;
-      if (Array.isArray(updated)) {
-        applyAndPersistTasks(updated);
-      } else {
-        applyAndPersistTasks((prev) => prev.map((t) => (t.id === editingId ? { ...t, ...trimmed } : t)));
+          const needsConfirm =
+            shouldConfirmDoneToInProgress?.(previousStatus, nextStatus) ??
+            (previousStatus === 'Done' && nextStatus === 'In Progress');
+
+          if (needsConfirm) {
+            setPendingStatusChange({ previousStatus, nextStatus });
+            setConfirm({
+              open: true,
+              title: 'Move task back to In Progress?',
+              message: 'This task is marked Done. Are you sure you want to move it back to In Progress?',
+              confirmLabel: 'Yes, move',
+              cancelLabel: 'Keep Done',
+              onConfirm: () => {
+                setForm((prev) => ({ ...prev, status: 'In Progress' }));
+                setPendingStatusChange(null);
+                setConfirm((c) => ({ ...c, open: false, onConfirm: null }));
+              },
+            });
+            return;
+          }
+        }
       }
-    } else {
-      const created = createTask?.(trimmed) ?? null;
-      if (created) {
-        applyAndPersistTasks((prev) => [created, ...prev]);
-      } else {
-        const now = Date.now();
-        applyAndPersistTasks((prev) => [
-          {
-            id: now,
-            ...trimmed,
-            createdAt: now,
-            updatedAt: now,
-          },
-          ...prev,
-        ]);
+
+      const next = { ...form, [field]: value };
+      setForm(next);
+
+      if (field === 'title' || field === 'dueDate') {
+        setTouched((t) => ({ ...t, [field]: true }));
+        validate(next);
       }
-    }
+    },
+    [editingId, form, tasks, validate]
+  );
 
-    reset();
-    titleInputRef.current?.focus();
-  }
+  const onBlur = useCallback(
+    (field) => () => {
+      setTouched((t) => ({ ...t, [field]: true }));
+      validate();
+    },
+    [validate]
+  );
 
-  function edit(task) {
+  const submit = useCallback(
+    (e) => {
+      e.preventDefault();
+
+      const trimmed = { ...form, title: (form.title ?? '').trim() };
+      const nextErrors = validate(trimmed);
+      setTouched({ title: true, dueDate: true });
+
+      if (nextErrors.title || nextErrors.dueDate) {
+        focusFirstError(nextErrors);
+        return;
+      }
+
+      if (editingId) {
+        const updated = updateTask?.(tasks, editingId, trimmed) ?? null;
+        if (Array.isArray(updated)) {
+          applyAndPersistTasks(updated);
+        } else {
+          applyAndPersistTasks((prev) => prev.map((t) => (t.id === editingId ? { ...t, ...trimmed } : t)));
+        }
+      } else {
+        const created = createTask?.(trimmed) ?? null;
+        if (created) {
+          applyAndPersistTasks((prev) => [created, ...prev]);
+        } else {
+          const now = Date.now();
+          applyAndPersistTasks((prev) => [
+            {
+              id: now,
+              ...trimmed,
+              createdAt: now,
+              updatedAt: now,
+            },
+            ...prev,
+          ]);
+        }
+      }
+
+      reset();
+      titleInputRef.current?.focus();
+    },
+    [applyAndPersistTasks, editingId, focusFirstError, form, reset, tasks, validate]
+  );
+
+  const edit = useCallback((task) => {
     if (!task) return;
 
     setForm({
@@ -217,49 +236,43 @@ export default function App() {
     setErrors({ title: '', dueDate: '' });
 
     requestAnimationFrame(() => titleInputRef.current?.focus());
-  }
+  }, []);
 
-  function requestDelete(task) {
-    if (!task) return;
+  const requestDelete = useCallback(
+    (task) => {
+      if (!task) return;
 
-    setPendingDelete(task);
-    setConfirm({
-      open: true,
-      title: 'Delete task?',
-      message: `Delete "${task.title}"?`,
-      confirmLabel: 'Delete',
-      cancelLabel: 'Cancel',
-      onConfirm: () => {
-        const toDelete = task;
+      setPendingDelete(task);
+      setConfirm({
+        open: true,
+        title: 'Delete task?',
+        message: `Delete "${task.title}"?`,
+        confirmLabel: 'Delete',
+        cancelLabel: 'Cancel',
+        onConfirm: () => {
+          const toDelete = task;
 
-        applyAndPersistTasks((prev) => prev.filter((t) => t.id !== toDelete.id));
-        if (editingId === toDelete.id) reset();
+          applyAndPersistTasks((prev) => prev.filter((t) => t.id !== toDelete.id));
+          if (editingId === toDelete.id) reset();
 
-        setToast({
-          open: true,
-          message: `Deleted "${toDelete.title}".`,
-          actionLabel: 'Undo',
-          durationMs: 6000,
-          onAction: () => {
-            applyAndPersistTasks((prev) => [toDelete, ...prev]);
-            setToast((t) => ({ ...t, open: false }));
-          },
-        });
+          setToast({
+            open: true,
+            message: `Deleted "${toDelete.title}".`,
+            actionLabel: 'Undo',
+            durationMs: 6000,
+            onAction: () => {
+              applyAndPersistTasks((prev) => [toDelete, ...prev]);
+              setToast((t) => ({ ...t, open: false }));
+            },
+          });
 
-        setPendingDelete(null);
-        setConfirm((c) => ({ ...c, open: false, onConfirm: null }));
-      },
-    });
-  }
-
-  function closeConfirm() {
-    if (pendingStatusChange) {
-      setForm((prev) => ({ ...prev, status: pendingStatusChange.previousStatus }));
-      setPendingStatusChange(null);
-    }
-    setPendingDelete(null);
-    setConfirm((c) => ({ ...c, open: false, onConfirm: null }));
-  }
+          setPendingDelete(null);
+          setConfirm((c) => ({ ...c, open: false, onConfirm: null }));
+        },
+      });
+    },
+    [applyAndPersistTasks, editingId, reset]
+  );
 
   const visibleTasks = useMemo(() => {
     const params = { search, filterStatus, filterPriority, sortBy, sortDir };
