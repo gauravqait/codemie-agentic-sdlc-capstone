@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { TASK_STATUS_VALUES } from './utils/constants';
-import { loadTasks, saveTasks } from './services/storage';
-import { validateTaskDraft } from './utils/validation';
-import { createTask, updateTask } from './utils/taskModel';
-import { selectVisibleTasks } from './utils/taskSelectors';
+import { TASK_STATUS_VALUES } from './utils/constants.js';
+import { loadTasks, saveTasks } from './services/storage.js';
+import { createTask, updateTask } from './utils/taskModel.js';
+import { selectVisibleTasks } from './utils/taskSelectors.js';
+import { validateTaskDraft } from './utils/validation.js';
 
-const EMPTY_DRAFT = {
+const EMPTY_FORM = {
   title: '',
   description: '',
   status: TASK_STATUS_VALUES[0],
@@ -15,74 +15,66 @@ const EMPTY_DRAFT = {
 export default function App() {
   const [tasks, setTasks] = useState(() => loadTasks());
 
-  const [draft, setDraft] = useState(EMPTY_DRAFT);
-  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [editingId, setEditingId] = useState(/** @type {string | null} */ (null));
 
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
 
-  const [errors, setErrors] = useState({});
+  const [fieldErrors, setFieldErrors] = useState(/** @type {Record<string, string>} */ ({}));
 
-  const titleRef = useRef(null);
-  const descriptionRef = useRef(null);
-  const statusRef = useRef(null);
-
-  const visibleTasks = useMemo(
-    () => selectVisibleTasks(tasks, { query, status: statusFilter }),
-    [tasks, query, statusFilter],
-  );
+  const titleRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+  const descriptionRef = useRef(/** @type {HTMLTextAreaElement | null} */ (null));
+  const statusRef = useRef(/** @type {HTMLSelectElement | null} */ (null));
 
   useEffect(() => {
     saveTasks(tasks);
   }, [tasks]);
 
+  const visibleTasks = useMemo(
+    () => selectVisibleTasks(tasks, { query, statusFilter }),
+    [tasks, query, statusFilter],
+  );
+
   const change = (field) => (e) => {
     const value = e.target.value;
-    setDraft((prev) => ({ ...prev, [field]: value }));
+    setForm((prev) => ({ ...prev, [field]: value }));
 
-    setErrors((prev) => {
-      if (!prev?.[field]) return prev;
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
       const next = { ...prev };
       delete next[field];
       return next;
     });
   };
 
-  const focusFirstInvalidField = (nextErrors) => {
-    const order = [
-      ['title', titleRef],
-      ['description', descriptionRef],
-      ['status', statusRef],
-    ];
-
-    for (const [field, ref] of order) {
-      if (nextErrors?.[field] && ref.current) {
-        ref.current.focus();
-        return;
-      }
-    }
-  };
+  function focusFirstInvalid(nextErrors) {
+    if (nextErrors.title) return titleRef.current?.focus();
+    if (nextErrors.description) return descriptionRef.current?.focus();
+    if (nextErrors.status) return statusRef.current?.focus();
+  }
 
   function reset() {
-    setDraft(EMPTY_DRAFT);
+    setForm(EMPTY_FORM);
     setEditingId(null);
-    setErrors({});
+    setFieldErrors({});
   }
 
   function submit(e) {
     e.preventDefault();
 
-    const nextErrors = validateTaskDraft(draft);
-    if (Object.keys(nextErrors).length > 0) {
-      setErrors(nextErrors);
-      focusFirstInvalidField(nextErrors);
+    const { isValid, fieldErrors: nextErrors, normalized } = validateTaskDraft(form);
+
+    if (!isValid) {
+      setFieldErrors(nextErrors);
+      focusFirstInvalid(nextErrors);
       return;
     }
 
     if (editingId) {
-      setTasks((prev) => prev.map((t) => (t.id === editingId ? updateTask(t, draft) : t)));
+      setTasks((prev) => prev.map((t) => (t.id === editingId ? updateTask(t, normalized) : t)));
     } else {
-      setTasks((prev) => [createTask(draft), ...prev]);
+      setTasks((prev) => [createTask(normalized), ...prev]);
     }
 
     reset();
@@ -90,19 +82,18 @@ export default function App() {
   }
 
   function edit(task) {
-    setDraft({
-      title: task?.title ?? '',
-      description: task?.description ?? '',
-      status: task?.status ?? EMPTY_DRAFT.status,
+    setForm({
+      title: task.title ?? '',
+      description: task.description ?? '',
+      status: task.status ?? TASK_STATUS_VALUES[0],
     });
     setEditingId(task.id);
-    setErrors({});
+    setFieldErrors({});
     titleRef.current?.focus();
   }
 
   function remove(task) {
     if (!window.confirm(`Delete "${task.title}"?`)) return;
-
     setTasks((prev) => prev.filter((t) => t.id !== task.id));
     if (editingId === task.id) reset();
   }
@@ -117,30 +108,28 @@ export default function App() {
       ? 'No tasks match your search/filter.'
       : null;
 
-  const titleErrorId = errors.title ? 'title-error' : undefined;
-  const descriptionErrorId = errors.description ? 'description-error' : undefined;
-  const statusErrorId = errors.status ? 'status-error' : undefined;
+  const titleErrorId = fieldErrors.title ? 'title-error' : undefined;
+  const descriptionErrorId = fieldErrors.description ? 'description-error' : undefined;
+  const statusErrorId = fieldErrors.status ? 'status-error' : undefined;
 
   return (
     <main>
       <h1>Task Manager</h1>
 
       <form onSubmit={submit} aria-label="Task form" noValidate>
-        <div aria-live="polite" aria-atomic="true" />
-
         <label>
           Title
           <input
             ref={titleRef}
-            value={draft.title}
+            value={form.title}
             onChange={change('title')}
-            aria-invalid={Boolean(errors.title)}
+            aria-invalid={Boolean(fieldErrors.title)}
             aria-describedby={titleErrorId}
           />
         </label>
-        {errors.title && (
+        {fieldErrors.title && (
           <p id="title-error" role="alert">
-            {errors.title}
+            {fieldErrors.title}
           </p>
         )}
 
@@ -148,15 +137,15 @@ export default function App() {
           Description
           <textarea
             ref={descriptionRef}
-            value={draft.description}
+            value={form.description}
             onChange={change('description')}
-            aria-invalid={Boolean(errors.description)}
+            aria-invalid={Boolean(fieldErrors.description)}
             aria-describedby={descriptionErrorId}
           />
         </label>
-        {errors.description && (
+        {fieldErrors.description && (
           <p id="description-error" role="alert">
-            {errors.description}
+            {fieldErrors.description}
           </p>
         )}
 
@@ -164,9 +153,9 @@ export default function App() {
           Status
           <select
             ref={statusRef}
-            value={draft.status}
+            value={form.status}
             onChange={change('status')}
-            aria-invalid={Boolean(errors.status)}
+            aria-invalid={Boolean(fieldErrors.status)}
             aria-describedby={statusErrorId}
           >
             {TASK_STATUS_VALUES.map((s) => (
@@ -176,9 +165,9 @@ export default function App() {
             ))}
           </select>
         </label>
-        {errors.status && (
+        {fieldErrors.status && (
           <p id="status-error" role="alert">
-            {errors.status}
+            {fieldErrors.status}
           </p>
         )}
 
