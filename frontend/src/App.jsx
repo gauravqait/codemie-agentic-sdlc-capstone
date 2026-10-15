@@ -1,55 +1,101 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
+import { load, save } from './persistence/storage.js';
+import { createTask, updateTask } from './domain/tasks.js';
+import { selectVisibleTasks } from './domain/selectors.js';
 
 const STATUSES = ['To Do', 'In Progress', 'Done'];
-const EMPTY = { title: '', description: '', status: 'To Do' };
+const EMPTY_FORM = { title: '', description: '', status: 'To Do' };
 
 export default function App() {
-  const [tasks, setTasks] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('tasks')) ?? [];
-    } catch {
-      return [];
-    }
-  });
-  const [form, setForm] = useState(EMPTY);
+  const titleErrorId = useId();
+  const descriptionErrorId = useId();
+  const statusErrorId = useId();
+
+  const [tasks, setTasks] = useState(() => load());
+  const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState(null);
-  const [error, setError] = useState('');
+
+  const [fieldErrors, setFieldErrors] = useState({
+    title: '',
+    description: '',
+    status: '',
+  });
+
+  const [filters, setFilters] = useState({ status: 'All', keyword: '' });
 
   useEffect(() => {
-    localStorage.setItem('tasks', JSON.stringify(tasks));
+    save(tasks);
   }, [tasks]);
 
-  const change = (field) => (e) => setForm({ ...form, [field]: e.target.value });
+  const visibleTasks = useMemo(() => selectVisibleTasks(tasks, filters), [tasks, filters]);
+
+  const change = (field) => (e) => {
+    setForm((prev) => ({ ...prev, [field]: e.target.value }));
+    // Clear field error on edit for better UX
+    setFieldErrors((prev) => (prev[field] ? { ...prev, [field]: '' } : prev));
+  };
+
+  const changeFilter = (field) => (e) =>
+    setFilters((prev) => ({ ...prev, [field]: e.target.value }));
+
+  function validate(nextForm) {
+    const errors = { title: '', description: '', status: '' };
+
+    const title = nextForm.title.trim();
+    if (!title) errors.title = 'Title is required.';
+
+    if (!STATUSES.includes(nextForm.status)) errors.status = 'Invalid status.';
+
+    return { ok: !errors.title && !errors.description && !errors.status, errors, normalizedTitle: title };
+  }
 
   function submit(e) {
     e.preventDefault();
-    const title = form.title.trim();
-    if (!title) return setError('Title is required.');
-    const task = { ...form, title };
-    setTasks(
-      editingId
-        ? tasks.map((t) => (t.id === editingId ? { ...t, ...task } : t))
-        : [{ ...task, id: Date.now() }, ...tasks],
-    );
+
+    const { ok, errors, normalizedTitle } = validate(form);
+    if (!ok) {
+      setFieldErrors(errors);
+      return;
+    }
+
+    if (editingId) {
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === editingId
+            ? updateTask(t, { title: normalizedTitle, description: form.description, status: form.status })
+            : t,
+        ),
+      );
+    } else {
+      setTasks((prev) =>
+        [createTask({ title: normalizedTitle, description: form.description, status: form.status }), ...prev],
+      );
+    }
+
     reset();
   }
 
   function reset() {
-    setForm(EMPTY);
+    setForm(EMPTY_FORM);
     setEditingId(null);
-    setError('');
+    setFieldErrors({ title: '', description: '', status: '' });
   }
 
   function edit(task) {
-    setForm(task);
+    // clone into form state to avoid accidental mutations
+    setForm({ title: task.title ?? '', description: task.description ?? '', status: task.status ?? 'To Do' });
     setEditingId(task.id);
+    setFieldErrors({ title: '', description: '', status: '' });
   }
 
   function remove(task) {
     if (!window.confirm(`Delete "${task.title}"?`)) return;
-    setTasks(tasks.filter((t) => t.id !== task.id));
+    setTasks((prev) => prev.filter((t) => t.id !== task.id));
     if (editingId === task.id) reset();
   }
+
+  const showNoMatches = tasks.length > 0 && visibleTasks.length === 0;
+  const showNoTasks = tasks.length === 0;
 
   return (
     <main>
@@ -58,21 +104,53 @@ export default function App() {
       <form onSubmit={submit} aria-label="Task form">
         <label>
           Title
-          <input value={form.title} onChange={change('title')} />
+          <input
+            value={form.title}
+            onChange={change('title')}
+            aria-invalid={fieldErrors.title ? 'true' : 'false'}
+            aria-describedby={fieldErrors.title ? titleErrorId : undefined}
+          />
         </label>
-        {error && <p role="alert">{error}</p>}
+        {fieldErrors.title && (
+          <p id={titleErrorId} role="alert">
+            {fieldErrors.title}
+          </p>
+        )}
+
         <label>
           Description
-          <textarea value={form.description} onChange={change('description')} />
+          <textarea
+            value={form.description}
+            onChange={change('description')}
+            aria-invalid={fieldErrors.description ? 'true' : 'false'}
+            aria-describedby={fieldErrors.description ? descriptionErrorId : undefined}
+          />
         </label>
+        {fieldErrors.description && (
+          <p id={descriptionErrorId} role="alert">
+            {fieldErrors.description}
+          </p>
+        )}
+
         <label>
           Status
-          <select value={form.status} onChange={change('status')}>
+          <select
+            value={form.status}
+            onChange={change('status')}
+            aria-invalid={fieldErrors.status ? 'true' : 'false'}
+            aria-describedby={fieldErrors.status ? statusErrorId : undefined}
+          >
             {STATUSES.map((s) => (
               <option key={s}>{s}</option>
             ))}
           </select>
         </label>
+        {fieldErrors.status && (
+          <p id={statusErrorId} role="alert">
+            {fieldErrors.status}
+          </p>
+        )}
+
         <div>
           <button type="submit">{editingId ? 'Save' : 'Add'}</button>
           {editingId && (
@@ -83,9 +161,32 @@ export default function App() {
         </div>
       </form>
 
-      {tasks.length === 0 && <p>No tasks yet.</p>}
+      <section aria-label="Task filters">
+        <label>
+          Status
+          <select value={filters.status} onChange={changeFilter('status')}>
+            <option>All</option>
+            {STATUSES.map((s) => (
+              <option key={s}>{s}</option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          Search
+          <input
+            value={filters.keyword}
+            onChange={changeFilter('keyword')}
+            placeholder="Search tasks"
+          />
+        </label>
+      </section>
+
+      {showNoTasks && <p>No tasks yet.</p>}
+      {showNoMatches && <p>No tasks match your filters.</p>}
+
       <ul>
-        {tasks.map((task) => (
+        {visibleTasks.map((task) => (
           <li key={task.id}>
             <div>
               <strong>{task.title}</strong> <small>({task.status})</small>
