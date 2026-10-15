@@ -166,9 +166,9 @@ export default function App() {
             aria-invalid={Boolean(errors.status)}
             aria-describedby={statusErrorId}
           >
-            {STATUSES.map((s) => (
+            {TASK_STATUS_VALUES.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {TASK_STATUSES[s] ?? s}
               </option>
             ))}
           </select>
@@ -199,9 +199,9 @@ export default function App() {
           Filter by status
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="All">All</option>
-            {STATUSES.map((s) => (
+            {TASK_STATUS_VALUES.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {TASK_STATUSES[s] ?? s}
               </option>
             ))}
           </select>
