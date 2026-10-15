@@ -16,7 +16,7 @@ async function addTask(user, title) {
 }
 
 async function editFirstTask(user, newTitle, newStatus) {
-  const list = screen.getByRole('list', { name: /tasks/i });
+  const list = screen.getByRole('list', { name: 'Tasks' });
   const firstItem = within(list).getAllByRole('listitem')[0];
 
   await user.click(within(firstItem).getByRole('button', { name: /edit/i }));
@@ -32,7 +32,7 @@ async function editFirstTask(user, newTitle, newStatus) {
 }
 
 async function editTaskByTitle(user, titleToFind, newTitle, newStatus) {
-  const list = screen.getByRole('list', { name: /tasks/i });
+  const list = screen.getByRole('list', { name: 'Tasks' });
   const items = within(list).getAllByRole('listitem');
 
   const targetItem = items.find((li) => li.textContent?.includes(titleToFind));
@@ -53,7 +53,7 @@ async function editTaskByTitle(user, titleToFind, newTitle, newStatus) {
 }
 
 async function deleteFirstTask(user) {
-  const list = screen.getByRole('list', { name: /tasks/i });
+  const list = screen.getByRole('list', { name: 'Tasks' });
   const firstItem = within(list).getAllByRole('listitem')[0];
   await user.click(within(firstItem).getByRole('button', { name: /delete/i }));
 }
@@ -165,7 +165,7 @@ it('filter, search, and sort behave', async () => {
   const sortSelect = screen.getByRole('combobox', { name: 'Sort tasks' });
   await user.selectOptions(sortSelect, 'titleAsc');
 
-  const list = screen.getByRole('list', { name: /tasks/i });
+  const list = screen.getByRole('list', { name: 'Tasks' });
   const titles = within(list)
     .getAllByRole('listitem')
     .map((li) => li.textContent);
