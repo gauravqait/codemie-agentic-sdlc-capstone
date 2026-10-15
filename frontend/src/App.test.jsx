@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, it, vi } from 'vitest';
-import App from './App';
+import App from './App.jsx';
 
 function getFilterSection() {
   return screen.getByLabelText('Task filters');
