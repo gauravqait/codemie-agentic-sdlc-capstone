@@ -305,15 +305,15 @@ it('filters by status (aria-label "Filter by status")', async () => {
   await addTask(user, { title: 'Do later', priority: 'High' });
 
   const statusFilter = getStatusFilterControl();
-  // We don't assume exact option labels; we select by value when possible.
-  // "completed" is a common status key; adjust if your UI uses different values.
-  await user.selectOptions(statusFilter, 'completed');
 
-  // When filtering to completed, newly-added tasks (typically active) should not show.
+  // App statuses: 'To Do', 'In Progress', 'Done'
+  await user.selectOptions(statusFilter, 'Done');
+
+  // Newly-added tasks are typically not "Done", so they should be hidden.
   expect(screen.queryByText('Do soon')).not.toBeInTheDocument();
   expect(screen.queryByText('Do later')).not.toBeInTheDocument();
 
-  await user.selectOptions(statusFilter, 'all');
+  await user.selectOptions(statusFilter, 'All');
   expect(screen.getByText('Do soon')).toBeInTheDocument();
   expect(screen.getByText('Do later')).toBeInTheDocument();
 });
@@ -353,7 +353,13 @@ it('sorts tasks (aria-label "Sort by") and supports known sort keys (createdAtDe
   // With createdAtDesc, newest should appear first in the rendered list.
   const third = screen.getByText('Third');
   const second = screen.getByText('Second');
+  const first = screen.getByText('First');
 
-  // If these are in a list, document position should reflect sort order.
-  expect(third.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  // Assert order: Third before Second before First.
+  expect(
+    Boolean(third.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING),
+  ).toBe(true);
+  expect(
+    Boolean(second.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING),
+  ).toBe(true);
 });
