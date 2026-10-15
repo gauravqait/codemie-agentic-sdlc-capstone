@@ -147,7 +147,8 @@ export default function App() {
 
     const firstInvalid = firstInvalidField(nextErrors);
     if (firstInvalid) {
-      setStatusMessage('Please fix the highlighted fields.');
+      const details = nextErrors?.[firstInvalid] ? ` ${nextErrors[firstInvalid]}` : '';
+      setStatusMessage(`Please fix the highlighted fields.${details}`);
       focusField(firstInvalid);
       return;
     }
@@ -325,12 +326,16 @@ export default function App() {
         <div>
           <label>
             Search
-            <input value={query} onChange={(e) => setQuery(e.target.value)} />
+            <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} />
           </label>
 
           <label>
             Filter status
-            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              aria-label="Filter status"
+            >
               <option value="All">All</option>
               {STATUSES.map((s) => (
                 <option key={s} value={s}>
@@ -342,7 +347,7 @@ export default function App() {
 
           <label>
             Sort
-            <select value={sort} onChange={(e) => setSort(e.target.value)}>
+            <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort tasks">
               <option value="updatedDesc">Recently updated</option>
               <option value="createdDesc">Recently created</option>
               <option value="titleAsc">Title (A–Z)</option>
@@ -417,7 +422,7 @@ export default function App() {
             </h2>
             <ul aria-label="Tasks">
               {filteredTasks.map((task) => (
-                <li key={task.id}>
+                <li key={task.id} data-id={task.id}>
                   <div>
                     <strong>{task.title}</strong> <small>({task.status})</small>
                     {task.description && <p>{task.description}</p>}
