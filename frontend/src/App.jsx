@@ -6,15 +6,18 @@ const LIMITS = taskModel.LIMITS;
 
 const EMPTY = { title: '', description: '', status: STATUSES[0] ?? 'To Do' };
 
-function toText(value) {
-  return typeof value === 'string' ? value : '';
-}
-
 function formatWhen(iso) {
   if (typeof iso !== 'string' || iso.trim() === '') return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   return d.toLocaleString();
+}
+
+function firstInvalidField(errors) {
+  if (errors?.title) return 'title';
+  if (errors?.description) return 'description';
+  if (errors?.status) return 'status';
+  return '';
 }
 
 export default function App() {
@@ -92,14 +95,14 @@ export default function App() {
   }
 
   function setField(field, value) {
-    setForm((prev) => ({ ...prev, [field]: value }));
+    const nextDraft = { ...form, [field]: value };
+    setForm(nextDraft);
 
     // Keep per-field UX responsive while using taskModel as the source of truth.
-    const nextDraft = { ...form, [field]: value };
-    const validation = taskModel.validateTaskDraft(nextDraft);
+    const { errors: nextErrors } = taskModel.validateTaskDraft(nextDraft);
     setErrors((prev) => ({
       ...prev,
-      [field]: validation?.errors?.[field] ?? '',
+      [field]: nextErrors?.[field] ?? '',
     }));
   }
 
@@ -115,8 +118,9 @@ export default function App() {
   }
 
   function edit(task) {
+    // Only store draft fields in the form state; timestamps remain canonical on the task.
     setForm({ title: task.title, description: task.description, status: task.status });
-    setEditingId(task.id);
+    setEditingId(String(task.id));
     setErrors({ title: '', description: '', status: '' });
     setStatusMessage(`Editing "${task.title}".`);
     titleRef.current?.focus();
@@ -124,21 +128,20 @@ export default function App() {
 
   function remove(task) {
     if (!window.confirm(`Delete "${task.title}"?`)) return;
-    setTasks((prev) => prev.filter((t) => t.id !== task.id));
-    if (editingId === task.id) reset();
+    setTasks((prev) => prev.filter((t) => t.id !== String(task.id)));
+    if (editingId === String(task.id)) reset();
     setStatusMessage(`Deleted "${task.title}".`);
   }
 
   function submit(e) {
     e.preventDefault();
 
-    const validation = taskModel.validateTaskDraft(form);
-    const nextErrors = {
-      title: validation?.errors?.title ?? '',
-      description: validation?.errors?.description ?? '',
-      status: validation?.errors?.status ?? '',
-    };
-    setErrors(nextErrors);
+    const { errors: nextErrors, value } = taskModel.validateTaskDraft(form);
+    setErrors({
+      title: nextErrors?.title ?? '',
+      description: nextErrors?.description ?? '',
+      status: nextErrors?.status ?? '',
+    });
 
     const firstInvalid = firstInvalidField(nextErrors);
     if (firstInvalid) {
@@ -152,10 +155,10 @@ export default function App() {
     if (editingId) {
       setTasks((prev) =>
         prev.map((t) =>
-          t.id === editingId
+          String(t.id) === String(editingId)
             ? {
                 ...t,
-                ...validation.value,
+                ...value,
                 updatedAt: nowIso,
               }
             : t,
@@ -164,10 +167,10 @@ export default function App() {
       setStatusMessage('Task updated.');
     } else {
       const created = {
-        id: taskModel.generateId(),
+        id: String(taskModel.generateId()),
         createdAt: nowIso,
         updatedAt: nowIso,
-        ...validation.value,
+        ...value,
       };
 
       setTasks((prev) => [created, ...prev]);
@@ -198,8 +201,8 @@ export default function App() {
       return;
     }
 
-    // Use taskModel loader to normalize/migrate imported tasks as well.
-    const incoming = taskModel.loadTasksFromStorage(raw);
+    // Normalize/migrate imported tasks as well (do not use storage loader for raw arrays).
+    const incoming = taskModel.loadTasks(raw);
 
     if (!Array.isArray(incoming) || incoming.length === 0) {
       setStatusMessage('Import completed: no valid tasks found in JSON.');
@@ -208,15 +211,17 @@ export default function App() {
 
     setTasks((prev) => {
       if (importMode === 'replace') return incoming;
-      const byId = new Map(prev.map((t) => [t.id, t]));
+
+      const byId = new Map(prev.map((t) => [String(t.id), t]));
       for (const t of incoming) {
-        const existing = byId.get(t.id);
+        const id = String(t.id);
+        const existing = byId.get(id);
         if (!existing) {
-          byId.set(t.id, t);
+          byId.set(id, t);
           continue;
         }
         // Prefer newer updatedAt when merging (ISO strings compare lexicographically)
-        byId.set(t.id, existing.updatedAt >= t.updatedAt ? existing : t);
+        byId.set(id, existing.updatedAt >= t.updatedAt ? existing : t);
       }
       return Array.from(byId.values());
     });
