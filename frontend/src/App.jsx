@@ -379,23 +379,30 @@ export default function App() {
           </button>
         </div>
 
-        <label>
-          Import mode
-          <select value={importMode} onChange={(e) => setImportMode(e.target.value)}>
+        <div>
+          <label htmlFor="import-mode">Import mode</label>
+          <select
+            id="import-mode"
+            aria-label="Import mode"
+            value={importMode}
+            onChange={(e) => setImportMode(e.target.value)}
+          >
             <option value="merge">Merge (by id)</option>
             <option value="replace">Replace all</option>
           </select>
-        </label>
+        </div>
 
-        <label>
-          JSON
+        <div>
+          <label htmlFor="import-json">JSON</label>
           <textarea
+            id="import-json"
+            aria-label="JSON"
             value={importText}
             onChange={(e) => setImportText(e.target.value)}
             rows={8}
             spellCheck={false}
           />
-        </label>
+        </div>
 
         <div>
           <button type="button" onClick={onImport}>
