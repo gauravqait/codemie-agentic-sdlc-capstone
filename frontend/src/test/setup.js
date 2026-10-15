@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
+import { randomUUID } from 'crypto';
 
 beforeEach(() => {
   localStorage.clear();
@@ -10,9 +11,8 @@ beforeEach(() => {
   }
 
   if (typeof globalThis.crypto.randomUUID !== 'function') {
-    let counter = 0;
     Object.defineProperty(globalThis.crypto, 'randomUUID', {
-      value: vi.fn(() => `00000000-0000-4000-8000-${String(++counter).padStart(12, '0')}`),
+      value: vi.fn(() => randomUUID()),
       configurable: true,
     });
   }
