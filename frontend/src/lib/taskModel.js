@@ -115,6 +115,24 @@ export function migrateTasks(rawTasks) {
   return { tasks, migrated };
 }
 
+/**
+ * Load tasks either from a provided input array (e.g., import) or from localStorage.
+ * When loading from storage, runs migration and persists back if needed.
+ *
+ * @param {any[] | null | undefined} [input]
+ * @returns {Task[]}
+ */
+export function loadTasks(input) {
+  // If an explicit input is provided, normalize/migrate it without touching storage.
+  if (typeof input !== 'undefined') {
+    const { tasks } = migrateTasks(input ?? []);
+    return tasks;
+  }
+
+  // Default: load from localStorage (existing behavior)
+  return loadTasksFromStorage();
+}
+
 export function loadTasksFromStorage() {
   try {
     const raw = JSON.parse(localStorage.getItem(STORAGE_KEY));
@@ -134,16 +152,23 @@ export function validateTaskDraft(draft) {
   /** @type {{title?: string, description?: string, status?: string}} */
   const errors = {};
 
-  const title = typeof draft.title === 'string' ? draft.title.trim() : '';
+  const title = typeof draft?.title === 'string' ? draft.title.trim() : '';
   if (!title) errors.title = 'Title is required.';
   else if (title.length > LIMITS.titleMax) errors.title = `Title must be ${LIMITS.titleMax} characters or less.`;
 
-  const description = typeof draft.description === 'string' ? draft.description : '';
+  const description = typeof draft?.description === 'string' ? draft.description : '';
   if (description.length > LIMITS.descriptionMax) {
     errors.description = `Description must be ${LIMITS.descriptionMax} characters or less.`;
   }
 
-  if (!STATUSES.includes(draft.status)) errors.status = 'Status is invalid.';
+  const status = STATUSES.includes(draft?.status) ? draft.status : 'To Do';
+  if (!STATUSES.includes(status)) errors.status = 'Status is invalid.';
 
-  return errors;
+  const value = {
+    title: title.slice(0, LIMITS.titleMax),
+    description: description.slice(0, LIMITS.descriptionMax),
+    status,
+  };
+
+  return { errors, value };
 }
