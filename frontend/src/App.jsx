@@ -72,21 +72,23 @@ export default function App() {
     sorted.sort((a, b) => {
       switch (sort) {
         case 'createdDesc':
-          return b.createdAt - a.createdAt;
+          // ISO 8601 timestamps compare lexicographically.
+          return String(b.createdAt).localeCompare(String(a.createdAt));
         case 'titleAsc':
           return a.title.localeCompare(b.title);
         case 'statusAsc':
           return a.status.localeCompare(b.status);
         case 'updatedDesc':
         default:
-          return b.updatedAt - a.updatedAt;
+          // ISO 8601 timestamps compare lexicographically.
+          return String(b.updatedAt).localeCompare(String(a.updatedAt));
       }
     });
 
     return sorted;
   }, [tasks, query, filterStatus, sort]);
 
-  const hasActiveFilters = query.trim() !== '' || filterStatus !== 'All';
+  const hasActiveFilters = query.trim() !== '' || filterStatus !== 'All' || sort !== 'updatedDesc';
 
   function focusField(field) {
     if (field === 'title') titleRef.current?.focus();
@@ -173,6 +175,7 @@ export default function App() {
         ...value,
       };
 
+      // Keep insertion consistent with default sort (newest updated first).
       setTasks((prev) => [created, ...prev]);
       setStatusMessage('Task added.');
     }
