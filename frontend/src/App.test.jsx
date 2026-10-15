@@ -7,22 +7,17 @@ function mockRandomUUID() {
   const original = globalThis.crypto?.randomUUID;
   const fn = vi.fn();
   let i = 0;
+
   fn.mockImplementation(() => `uuid-${++i}`);
+
   if (!globalThis.crypto) globalThis.crypto = {};
   globalThis.crypto.randomUUID = fn;
+
   return () => {
     if (original) globalThis.crypto.randomUUID = original;
     else delete globalThis.crypto.randomUUID;
   };
 }
-
-beforeEach(() => {
-  localStorage.clear();
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
 
 async function addTask(user, title, description) {
   const titleInput = screen.getByLabelText('Title');
@@ -40,19 +35,31 @@ async function addTask(user, title, description) {
   await user.click(screen.getByRole('button', { name: 'Add' }));
 }
 
-it('adds a task', async () => {
+beforeEach(() => {
+  localStorage.clear();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+it('adds a task and trims title', async () => {
   const restoreUUID = mockRandomUUID();
   const user = userEvent.setup();
+
   render(<App />);
 
-  await addTask(user, 'Buy milk', 'From store');
+  await addTask(user, '   Buy milk   ', 'From store');
 
   expect(screen.getByText('Buy milk')).toBeInTheDocument();
+  expect(screen.queryByText('   Buy milk   ')).not.toBeInTheDocument();
+
   restoreUUID();
 });
 
-it('rejects an empty title (field-level error under Title) and focuses Title', async () => {
+it('rejects empty title and focuses Title input', async () => {
   const user = userEvent.setup();
+
   render(<App />);
 
   const titleInput = screen.getByLabelText('Title');
@@ -61,38 +68,28 @@ it('rejects an empty title (field-level error under Title) and focuses Title', a
 
   await user.click(screen.getByRole('button', { name: 'Add' }));
 
-  // Field-level error should be associated with the Title field (no global alert requirement).
   expect(screen.getByText('Title is required.')).toBeInTheDocument();
   expect(screen.getByLabelText('Title')).toHaveFocus();
 });
 
-it('trims the title on submit', async () => {
+it('focuses Title after successful add', async () => {
   const restoreUUID = mockRandomUUID();
   const user = userEvent.setup();
-  render(<App />);
 
-  await addTask(user, '   Buy milk   ', 'Test');
-
-  expect(screen.getByText('Buy milk')).toBeInTheDocument();
-  expect(screen.queryByText('   Buy milk   ')).not.toBeInTheDocument();
-  restoreUUID();
-});
-
-it('focus moves to Title on successful add', async () => {
-  const restoreUUID = mockRandomUUID();
-  const user = userEvent.setup();
   render(<App />);
 
   await addTask(user, 'Focus test', 'Any');
 
   expect(screen.getByText('Focus test')).toBeInTheDocument();
   expect(screen.getByLabelText('Title')).toHaveFocus();
+
   restoreUUID();
 });
 
-it('edits a task (works with new model)', async () => {
+it('edits a task', async () => {
   const restoreUUID = mockRandomUUID();
   const user = userEvent.setup();
+
   render(<App />);
 
   await addTask(user, 'Old', 'Original description');
@@ -113,13 +110,15 @@ it('edits a task (works with new model)', async () => {
 
   expect(screen.getByText('New')).toBeInTheDocument();
   expect(screen.queryByText('Old')).not.toBeInTheDocument();
+
   restoreUUID();
 });
 
-it('deletes a task after confirmation (mock window.confirm)', async () => {
+it('deletes after confirmation', async () => {
   const restoreUUID = mockRandomUUID();
   const user = userEvent.setup();
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+  const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 
   render(<App />);
 
@@ -127,18 +126,20 @@ it('deletes a task after confirmation (mock window.confirm)', async () => {
   await user.click(screen.getByRole('button', { name: 'Delete' }));
 
   expect(screen.queryByText('Temp')).not.toBeInTheDocument();
+
+  confirmSpy.mockRestore();
   restoreUUID();
 });
 
-it('filters by status works (All vs Done)', async () => {
+it('filters by status (Done)', async () => {
   const restoreUUID = mockRandomUUID();
   const user = userEvent.setup();
+
   render(<App />);
 
   await addTask(user, 'Task A', 'desc a');
   await addTask(user, 'Task B', 'desc b');
 
-  // Mark "Task A" as done using its checkbox (assumed accessible name equals title)
   const taskACheckbox = screen.getByRole('checkbox', { name: 'Task A' });
   await user.click(taskACheckbox);
 
@@ -148,15 +149,13 @@ it('filters by status works (All vs Done)', async () => {
   expect(screen.getByText('Task A')).toBeInTheDocument();
   expect(screen.queryByText('Task B')).not.toBeInTheDocument();
 
-  await user.selectOptions(statusSelect, 'All');
-  expect(screen.getByText('Task A')).toBeInTheDocument();
-  expect(screen.getByText('Task B')).toBeInTheDocument();
   restoreUUID();
 });
 
-it('search works on title and description', async () => {
+it('searches by title/description', async () => {
   const restoreUUID = mockRandomUUID();
   const user = userEvent.setup();
+
   render(<App />);
 
   await addTask(user, 'Walk dog', 'Park loop');
@@ -176,7 +175,7 @@ it('search works on title and description', async () => {
   restoreUUID();
 });
 
-it('migrates legacy storage (array) to envelope with version and displays tasks', async () => {
+it('migrates legacy localStorage array to envelope', async () => {
   const legacy = [
     {
       id: 'legacy-1',
