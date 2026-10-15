@@ -4,12 +4,28 @@
   --danger: #dc2626;
   --danger-dark: #b91c1c;
   --success: #16a34a;
+
   --border: #d1d5db;
   --bg-light: #f9fafb;
   --text: #1f2937;
   --text-light: #6b7280;
   --error: #dc2626;
+
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.12);
+
+  --radius: 8px;
+  --radius-sm: 6px;
+
+  --focus: 2px solid var(--primary);
+
+  --badge-bg: #eef2ff;
+  --badge-text: #3730a3;
+
+  --warning: #d97706;
+  --warning-dark: #b45309;
+
+  --muted-bg: #f3f4f6;
 }
 
 * {
@@ -51,7 +67,7 @@ section {
   background: white;
   padding: 1.5rem;
   margin-bottom: 2rem;
-  border-radius: 8px;
+  border-radius: var(--radius);
   box-shadow: var(--shadow);
 }
 
@@ -61,11 +77,72 @@ h2 {
   color: var(--text);
 }
 
+/* Toolbar (Search / Filter / Sort) */
+.toolbar {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.toolbar-group {
+  flex: 1;
+  min-width: 220px;
+}
+
+.toolbar-group label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  color: var(--text);
+}
+
+.toolbar-group input,
+.toolbar-group select {
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  background: white;
+}
+
+.toolbar-group input:focus,
+.toolbar-group select:focus {
+  outline: var(--focus);
+  outline-offset: 2px;
+  border-color: var(--primary);
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.toolbar-actions .spacer {
+  flex: 1;
+}
+
 /* Task Form */
 .task-form {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.form-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.form-row > .form-group {
+  flex: 1;
+  min-width: 220px;
 }
 
 .form-group {
@@ -82,17 +159,23 @@ h2 {
 .form-group input,
 .form-group textarea,
 .form-group select {
-  padding: 0.5rem;
+  padding: 0.55rem 0.65rem;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 6px;
   font-size: 1rem;
   font-family: inherit;
+  background: white;
+}
+
+.form-group textarea {
+  min-height: 92px;
+  resize: vertical;
 }
 
 .form-group input:focus,
 .form-group textarea:focus,
 .form-group select:focus {
-  outline: 2px solid var(--primary);
+  outline: var(--focus);
   outline-offset: 2px;
   border-color: var(--primary);
 }
@@ -101,6 +184,12 @@ h2 {
 .form-group textarea[aria-invalid="true"],
 .form-group select[aria-invalid="true"] {
   border-color: var(--error);
+}
+
+.help-text {
+  color: var(--text-light);
+  font-size: 0.875rem;
+  margin: 0.25rem 0 0;
 }
 
 .error {
@@ -113,31 +202,38 @@ h2 {
   display: flex;
   gap: 0.5rem;
   margin-top: 0.5rem;
+  flex-wrap: wrap;
 }
 
+/* Buttons */
 button {
-  padding: 0.5rem 1rem;
+  padding: 0.55rem 1rem;
   background: var(--primary);
   color: white;
-  border: none;
-  border-radius: 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
   font-size: 1rem;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.2s, border-color 0.2s, transform 0.03s ease-in;
+  line-height: 1.1;
 }
 
 button:hover:not(:disabled) {
   background: var(--primary-dark);
 }
 
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
 button:disabled {
-  opacity: 0.5;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
 button:focus {
-  outline: 2px solid var(--primary);
+  outline: var(--focus);
   outline-offset: 2px;
 }
 
@@ -145,7 +241,7 @@ button[type="button"] {
   background: var(--text-light);
 }
 
-button[type="button"]:hover {
+button[type="button"]:hover:not(:disabled) {
   background: var(--text);
 }
 
@@ -153,11 +249,72 @@ button.danger {
   background: var(--danger);
 }
 
-button.danger:hover {
+button.danger:hover:not(:disabled) {
   background: var(--danger-dark);
 }
 
-/* Task Controls */
+/* Button variants */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  user-select: none;
+}
+
+.button.sm,
+button.sm {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+.button.secondary,
+button.secondary {
+  background: white;
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.button.secondary:hover:not(:disabled),
+button.secondary:hover:not(:disabled) {
+  background: var(--muted-bg);
+}
+
+.button.ghost,
+button.ghost {
+  background: transparent;
+  color: var(--text);
+  border-color: transparent;
+}
+
+.button.ghost:hover:not(:disabled),
+button.ghost:hover:not(:disabled) {
+  background: var(--muted-bg);
+  border-color: var(--border);
+}
+
+.button.success,
+button.success {
+  background: var(--success);
+}
+
+.button.success:hover:not(:disabled),
+button.success:hover:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+.button.warning,
+button.warning {
+  background: var(--warning);
+}
+
+.button.warning:hover:not(:disabled),
+button.warning:hover:not(:disabled) {
+  background: var(--warning-dark);
+}
+
+/* Task Controls (legacy / still supported) */
 .task-controls {
   display: flex;
   gap: 1rem;
@@ -181,10 +338,81 @@ button.danger:hover {
 
 .control-group input,
 .control-group select {
-  padding: 0.5rem;
+  padding: 0.55rem 0.65rem;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 6px;
   font-size: 0.95rem;
+  background: white;
+}
+
+.control-group input:focus,
+.control-group select:focus {
+  outline: var(--focus);
+  outline-offset: 2px;
+  border-color: var(--primary);
+}
+
+/* Badges (Status / Priority) */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.badge.status {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+
+.badge.status.done,
+.badge.status.completed {
+  background: #ecfdf5;
+  color: #065f46;
+  border-color: #a7f3d0;
+}
+
+.badge.status.pending {
+  background: #fff7ed;
+  color: #9a3412;
+  border-color: #fed7aa;
+}
+
+.badge.status.blocked {
+  background: #fef2f2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+
+.badge.priority {
+  background: var(--badge-bg);
+  color: var(--badge-text);
+  border-color: #c7d2fe;
+}
+
+.badge.priority.low {
+  background: #f3f4f6;
+  color: #374151;
+  border-color: #e5e7eb;
+}
+
+.badge.priority.medium {
+  background: #fff7ed;
+  color: #9a3412;
+  border-color: #fed7aa;
+}
+
+.badge.priority.high {
+  background: #fef2f2;
+  color: #991b1b;
+  border-color: #fecaca;
 }
 
 /* Task List */
@@ -200,27 +428,37 @@ button.danger:hover {
 .task-item {
   padding: 1rem;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 1rem;
   background: white;
-  transition: box-shadow 0.2s;
+  transition: box-shadow 0.2s, border-color 0.2s;
 }
 
 .task-item:hover {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-color: #cbd5e1;
 }
 
 .task-content {
   flex: 1;
+  min-width: 0;
+}
+
+.task-title-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  flex-wrap: wrap;
 }
 
 .task-title {
-  margin: 0 0 0.25rem;
+  margin: 0;
   font-size: 1.1rem;
   color: var(--text);
+  word-break: break-word;
 }
 
 .task-status {
@@ -232,6 +470,27 @@ button.danger:hover {
   margin: 0.5rem 0;
   color: var(--text);
   white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.5rem;
+  color: var(--text-light);
+  font-size: 0.875rem;
+}
+
+.task-meta .meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: var(--muted-bg);
+  border: 1px solid #e5e7eb;
 }
 
 .task-time {
@@ -245,6 +504,8 @@ button.danger:hover {
   display: flex;
   gap: 0.5rem;
   flex-shrink: 0;
+  align-items: flex-start;
+  flex-wrap: wrap;
 }
 
 .task-actions button {
@@ -252,20 +513,111 @@ button.danger:hover {
   font-size: 0.875rem;
 }
 
+/* Empty State */
 .empty-state {
   text-align: center;
   color: var(--text-light);
   padding: 2rem;
   font-style: italic;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: #fcfcfd;
+}
+
+.empty-state strong {
+  display: block;
+  font-style: normal;
+  color: var(--text);
+  margin-bottom: 0.25rem;
+}
+
+/* Dialog / Modal */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  z-index: 50;
+}
+
+.dialog {
+  width: 100%;
+  max-width: 560px;
+  background: white;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  border: 1px solid rgba(209, 213, 219, 0.9);
+  overflow: hidden;
+}
+
+.dialog-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.dialog-title {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--text);
+}
+
+.dialog-body {
+  padding: 1rem 1.25rem;
+}
+
+.dialog-footer {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.dialog-close {
+  background: transparent;
+  color: var(--text-light);
+  border-color: transparent;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+}
+
+.dialog-close:hover:not(:disabled) {
+  background: var(--muted-bg);
+  color: var(--text);
 }
 
 /* Responsive */
 @media (max-width: 640px) {
+  body {
+    padding: 14px;
+  }
+
+  section {
+    padding: 1rem;
+  }
+
   .task-controls {
     flex-direction: column;
   }
 
   .control-group {
+    min-width: 100%;
+  }
+
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .toolbar-group {
     min-width: 100%;
   }
 
@@ -279,5 +631,9 @@ button.danger:hover {
 
   .task-actions button {
     flex: 1;
+  }
+
+  .form-row > .form-group {
+    min-width: 100%;
   }
 }
