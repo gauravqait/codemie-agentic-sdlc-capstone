@@ -1,109 +1,20 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import * as taskModel from './taskModel';
+import * as taskModel from './lib/taskModel';
 
-const STATUSES = taskModel.STATUSES ?? ['To Do', 'In Progress', 'Done'];
-const EMPTY = taskModel.EMPTY ?? { title: '', description: '', status: 'To Do' };
+const STATUSES = taskModel.STATUSES;
+const LIMITS = taskModel.LIMITS;
 
-const STORAGE_KEY = 'tasks';
-
-function safeParse(json) {
-  try {
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
+const EMPTY = { title: '', description: '', status: STATUSES[0] ?? 'To Do' };
 
 function toText(value) {
   return typeof value === 'string' ? value : '';
 }
 
-function isValidStatus(status) {
-  return STATUSES.includes(status);
-}
-
-function validateField(field, rawValue) {
-  const value = field === 'status' ? rawValue : toText(rawValue);
-
-  switch (field) {
-    case 'title': {
-      const title = value.trim();
-      if (!title) return 'Title is required.';
-      if (title.length > 120) return 'Title must be 120 characters or less.';
-      return '';
-    }
-    case 'description': {
-      const description = value.trim();
-      if (description.length > 500) return 'Description must be 500 characters or less.';
-      return '';
-    }
-    case 'status': {
-      if (!isValidStatus(value)) return 'Please choose a valid status.';
-      return '';
-    }
-    default:
-      return '';
-  }
-}
-
-function validateForm(form) {
-  const errors = {
-    title: validateField('title', form.title),
-    description: validateField('description', form.description),
-    status: validateField('status', form.status),
-  };
-  return errors;
-}
-
-function firstInvalidField(errors) {
-  if (errors.title) return 'title';
-  if (errors.description) return 'description';
-  if (errors.status) return 'status';
-  return null;
-}
-
-function normalizeImportedTask(t) {
-  const title = toText(t?.title);
-  const description = toText(t?.description);
-  const status = isValidStatus(t?.status) ? t.status : EMPTY.status;
-
-  const now = Date.now();
-  const id = typeof t?.id === 'number' ? t.id : now + Math.floor(Math.random() * 1000);
-
-  const createdAt = typeof t?.createdAt === 'number' ? t.createdAt : now;
-  const updatedAt = typeof t?.updatedAt === 'number' ? t.updatedAt : createdAt;
-
-  return { id, title, description, status, createdAt, updatedAt };
-}
-
-function normalizeStoredTasks(value) {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map(normalizeImportedTask)
-    .filter((t) => t.title.trim().length > 0);
-}
-
-function mergeById(existing, incoming) {
-  const byId = new Map(existing.map((t) => [t.id, t]));
-  for (const t of incoming) {
-    const prev = byId.get(t.id);
-    if (!prev) {
-      byId.set(t.id, t);
-      continue;
-    }
-    // Prefer newer updatedAt when merging
-    byId.set(t.id, prev.updatedAt >= t.updatedAt ? prev : t);
-  }
-  return Array.from(byId.values());
-}
-
-function formatWhen(ts) {
-  if (typeof ts !== 'number') return '';
-  try {
-    return new Date(ts).toLocaleString();
-  } catch {
-    return '';
-  }
+function formatWhen(iso) {
+  if (typeof iso !== 'string' || iso.trim() === '') return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString();
 }
 
 export default function App() {
@@ -117,8 +28,8 @@ export default function App() {
   const statusRef = useRef(null);
 
   const [tasks, setTasks] = useState(() => {
-    const parsed = safeParse(localStorage.getItem(STORAGE_KEY));
-    return normalizeStoredTasks(parsed ?? []);
+    // taskModel.loadTasksFromStorage is responsible for migration/normalization.
+    return taskModel.loadTasksFromStorage();
   });
 
   const [form, setForm] = useState(EMPTY);
@@ -135,7 +46,7 @@ export default function App() {
   const [importMode, setImportMode] = useState('merge'); // merge | replace
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    taskModel.saveTasksToStorage(tasks);
   }, [tasks]);
 
   const filteredTasks = useMemo(() => {
@@ -182,7 +93,14 @@ export default function App() {
 
   function setField(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }));
-    setErrors((prev) => ({ ...prev, [field]: validateField(field, value) }));
+
+    // Keep per-field UX responsive while using taskModel as the source of truth.
+    const nextDraft = { ...form, [field]: value };
+    const validation = taskModel.validateTaskDraft(nextDraft);
+    setErrors((prev) => ({
+      ...prev,
+      [field]: validation?.errors?.[field] ?? '',
+    }));
   }
 
   function change(field) {
@@ -214,7 +132,12 @@ export default function App() {
   function submit(e) {
     e.preventDefault();
 
-    const nextErrors = validateForm(form);
+    const validation = taskModel.validateTaskDraft(form);
+    const nextErrors = {
+      title: validation?.errors?.title ?? '',
+      description: validation?.errors?.description ?? '',
+      status: validation?.errors?.status ?? '',
+    };
     setErrors(nextErrors);
 
     const firstInvalid = firstInvalidField(nextErrors);
@@ -224,40 +147,30 @@ export default function App() {
       return;
     }
 
-    const now = Date.now();
+    const nowIso = taskModel.nowIso();
 
     if (editingId) {
       setTasks((prev) =>
         prev.map((t) =>
           t.id === editingId
-            ? taskModel.update?.(t, { ...form, updatedAt: now }) ??
-              {
+            ? {
                 ...t,
-                ...form,
-                updatedAt: now,
+                ...validation.value,
+                updatedAt: nowIso,
               }
             : t,
         ),
       );
       setStatusMessage('Task updated.');
     } else {
-      const created = taskModel.create?.(form) ?? {
-        id: now,
-        createdAt: now,
-        updatedAt: now,
-        ...form,
-      };
-      // Ensure required persisted fields
-      const persisted = {
-        id: typeof created.id === 'number' ? created.id : now,
-        createdAt: typeof created.createdAt === 'number' ? created.createdAt : now,
-        updatedAt: typeof created.updatedAt === 'number' ? created.updatedAt : now,
-        title: toText(created.title).trim(),
-        description: toText(created.description),
-        status: isValidStatus(created.status) ? created.status : EMPTY.status,
+      const created = {
+        id: taskModel.generateId(),
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        ...validation.value,
       };
 
-      setTasks((prev) => [persisted, ...prev]);
+      setTasks((prev) => [created, ...prev]);
       setStatusMessage('Task added.');
     }
 
@@ -271,24 +184,41 @@ export default function App() {
   }
 
   function onImport() {
-    const parsed = safeParse(importText);
-    if (!parsed) {
+    let parsed;
+    try {
+      parsed = JSON.parse(importText);
+    } catch {
       setStatusMessage('Import failed: invalid JSON.');
       return;
     }
 
-    const incoming = normalizeStoredTasks(Array.isArray(parsed) ? parsed : parsed?.tasks);
+    const raw = Array.isArray(parsed) ? parsed : parsed?.tasks;
+    if (!Array.isArray(raw) || raw.length === 0) {
+      setStatusMessage('Import completed: no valid tasks found in JSON.');
+      return;
+    }
 
-    if (incoming.length === 0) {
+    // Use taskModel loader to normalize/migrate imported tasks as well.
+    const incoming = taskModel.loadTasksFromStorage(raw);
+
+    if (!Array.isArray(incoming) || incoming.length === 0) {
       setStatusMessage('Import completed: no valid tasks found in JSON.');
       return;
     }
 
     setTasks((prev) => {
-      const next =
-        importMode === 'replace' ? incoming : mergeById(prev, incoming);
-
-      return next;
+      if (importMode === 'replace') return incoming;
+      const byId = new Map(prev.map((t) => [t.id, t]));
+      for (const t of incoming) {
+        const existing = byId.get(t.id);
+        if (!existing) {
+          byId.set(t.id, t);
+          continue;
+        }
+        // Prefer newer updatedAt when merging (ISO strings compare lexicographically)
+        byId.set(t.id, existing.updatedAt >= t.updatedAt ? existing : t);
+      }
+      return Array.from(byId.values());
     });
 
     setStatusMessage(
@@ -339,6 +269,7 @@ export default function App() {
               onChange={change('description')}
               aria-invalid={errors.description ? 'true' : 'false'}
               aria-describedby={errors.description ? descriptionErrorId : undefined}
+              maxLength={LIMITS?.descriptionMax ?? 1000}
             />
           </label>
           {errors.description && (
