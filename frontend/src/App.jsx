@@ -89,6 +89,7 @@ export default function App() {
         dueDate: nextForm?.dueDate ?? '',
       };
 
+      // Ensure validation always runs against normalized values
       const nextErrors = validateTaskForm?.(values) ?? {};
       setErrors(nextErrors);
       return nextErrors;
@@ -282,6 +283,7 @@ export default function App() {
   );
 
   const visibleTasks = useMemo(() => {
+    // Ensure query object matches selectVisibleTasks signature (tasks, query)
     const selected = selectVisibleTasks?.(tasks, query);
     return Array.isArray(selected) ? selected : tasks;
   }, [tasks, query]);
@@ -357,8 +359,9 @@ export default function App() {
       </section>
 
       <form onSubmit={submit} aria-label="Task form" noValidate>
-        <label>Title</label>
+        <label htmlFor="title">Title</label>
         <input
+          id="title"
           ref={titleInputRef}
           value={form.title}
           onChange={change('title')}
@@ -372,11 +375,11 @@ export default function App() {
           </p>
         )}
 
-        <label>Description</label>
-        <textarea value={form.description} onChange={change('description')} />
+        <label htmlFor="description">Description</label>
+        <textarea id="description" value={form.description} onChange={change('description')} />
 
-        <label>Status</label>
-        <select value={form.status} onChange={change('status')}>
+        <label htmlFor="status">Status</label>
+        <select id="status" value={form.status} onChange={change('status')}>
           {STATUSES.map((s) => (
             <option key={s} value={s}>
               {s}
@@ -384,8 +387,8 @@ export default function App() {
           ))}
         </select>
 
-        <label>Priority</label>
-        <select value={form.priority} onChange={change('priority')}>
+        <label htmlFor="priority">Priority</label>
+        <select id="priority" value={form.priority} onChange={change('priority')}>
           {PRIORITIES.map((p) => (
             <option key={p} value={p}>
               {p}
@@ -393,8 +396,9 @@ export default function App() {
           ))}
         </select>
 
-        <label>Due date</label>
+        <label htmlFor="dueDate">Due date</label>
         <input
+          id="dueDate"
           ref={dueDateInputRef}
           type="date"
           value={form.dueDate}
