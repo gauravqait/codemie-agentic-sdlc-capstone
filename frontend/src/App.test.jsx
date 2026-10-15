@@ -31,6 +31,27 @@ async function editFirstTask(user, newTitle, newStatus) {
   await user.click(within(firstItem).getByRole('button', { name: /save/i }));
 }
 
+async function editTaskByTitle(user, titleToFind, newTitle, newStatus) {
+  const list = screen.getByRole('list', { name: /tasks/i });
+  const items = within(list).getAllByRole('listitem');
+
+  const targetItem = items.find((li) => li.textContent?.includes(titleToFind));
+  if (!targetItem) {
+    throw new Error(`Could not find task with title containing "${titleToFind}"`);
+  }
+
+  await user.click(within(targetItem).getByRole('button', { name: /edit/i }));
+  await user.clear(screen.getByRole('textbox', { name: /title/i }));
+  await user.type(screen.getByRole('textbox', { name: /title/i }), newTitle);
+
+  if (newStatus) {
+    const statusSelect = screen.getByRole('combobox', { name: /status/i });
+    await user.selectOptions(statusSelect, newStatus);
+  }
+
+  await user.click(within(targetItem).getByRole('button', { name: /save/i }));
+}
+
 async function deleteFirstTask(user) {
   const list = screen.getByRole('list', { name: /tasks/i });
   const firstItem = within(list).getAllByRole('listitem')[0];
@@ -122,8 +143,8 @@ it('filter, search, and sort behave', async () => {
   // Clear search
   await user.clear(searchBox);
 
-  // Set first task status to Done via edit
-  await editFirstTask(user, 'Charlie', 'Done');
+  // Set Charlie task status to Done via edit (do not assume insertion order)
+  await editTaskByTitle(user, 'Charlie', 'Charlie', 'Done');
 
   // Filter (implemented as select with aria-label "Filter status")
   const filterSelect = screen.getByRole('combobox', { name: 'Filter status' });
@@ -134,14 +155,15 @@ it('filter, search, and sort behave', async () => {
   expect(screen.queryByText('Alpha')).not.toBeInTheDocument();
   expect(screen.queryByText('Bravo')).not.toBeInTheDocument();
 
-  // Reset filter to show all (uses one of the implemented statuses; choose "To Do")
-  await user.selectOptions(filterSelect, 'To Do');
+  // Reset filter to show all
+  await user.selectOptions(filterSelect, 'All');
   expect(screen.getByText('Alpha')).toBeInTheDocument();
   expect(screen.getByText('Bravo')).toBeInTheDocument();
+  expect(screen.getByText('Charlie')).toBeInTheDocument();
 
   // Sort (implemented as select with aria-label "Sort tasks")
   const sortSelect = screen.getByRole('combobox', { name: 'Sort tasks' });
-  await user.selectOptions(sortSelect, 'Title (A–Z)');
+  await user.selectOptions(sortSelect, 'titleAsc');
 
   const list = screen.getByRole('list', { name: /tasks/i });
   const titles = within(list)
