@@ -4,34 +4,28 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import App from './App.jsx';
 
 function getPriorityControl() {
-  return (
-    screen.queryByLabelText(/^priority$/i) ??
-    screen.queryByRole('combobox', { name: /^priority$/i }) ??
-    screen.queryByRole('combobox', { name: /priority/i })
-  );
+  return screen.getByLabelText(/^priority$/i);
 }
 
 function getDueDateInput() {
-  return screen.queryByLabelText(/^due date$/i) ?? screen.queryByLabelText(/due date/i);
+  return screen.getByLabelText(/^due date$/i);
 }
 
 function getSearchInput() {
-  return (
-    screen.queryByRole('searchbox', { name: /^search$/i }) ??
-    screen.queryByRole('searchbox') ??
-    screen.queryByLabelText(/^search$/i) ??
-    screen.queryByPlaceholderText(/^search$/i) ??
-    screen.queryByLabelText(/search/i) ??
-    screen.queryByPlaceholderText(/search/i)
-  );
+  // New UI exposes aria-label "Search tasks"
+  return screen.getByLabelText(/^search tasks$/i);
 }
 
-function getFilterControl() {
-  return (
-    screen.queryByRole('combobox', { name: /filter/i }) ??
-    screen.queryByLabelText(/filter/i) ??
-    screen.queryByRole('combobox', { name: /priority/i })
-  );
+function getStatusFilterControl() {
+  return screen.getByLabelText(/^filter by status$/i);
+}
+
+function getPriorityFilterControl() {
+  return screen.getByLabelText(/^filter by priority$/i);
+}
+
+function getSortByControl() {
+  return screen.getByLabelText(/^sort by$/i);
 }
 
 function getTaskItemByTitle(title) {
@@ -127,35 +121,20 @@ async function commitEdit(user) {
 
 async function openDeleteModalForTask(user, title) {
   const item = getTaskItemByTitle(title);
-  const deleteButton =
-    within(item).queryByRole('button', { name: /^delete$/i }) ??
-    within(item).queryByRole('button', { name: /delete/i }) ??
-    within(item).queryByRole('button', { name: /^remove$/i }) ??
-    within(item).getByRole('button', { name: /delete|remove/i });
-
+  const deleteButton = within(item).getByRole('button', { name: /^delete$/i });
   await user.click(deleteButton);
 }
 
 async function confirmDeleteModal(user) {
+  // New UI uses ConfirmDialog: role="dialog" + a "Delete" confirm button.
   const dialog = await screen.findByRole('dialog');
-  const confirmButton =
-    within(dialog).queryByRole('button', { name: /^confirm$/i }) ??
-    within(dialog).queryByRole('button', { name: /confirm/i }) ??
-    within(dialog).queryByRole('button', { name: /^delete$/i }) ??
-    within(dialog).queryByRole('button', { name: /delete/i }) ??
-    within(dialog).queryByRole('button', { name: /^remove$/i }) ??
-    within(dialog).queryByRole('button', { name: /remove/i }) ??
-    within(dialog).getByRole('button', { name: /confirm|delete|remove|yes|ok/i });
-
+  const confirmButton = within(dialog).getByRole('button', { name: /^delete$/i });
   await user.click(confirmButton);
 }
 
 async function cancelModal(user) {
   const dialog = await screen.findByRole('dialog');
-  const cancelButton =
-    within(dialog).queryByRole('button', { name: /cancel|no|close/i }) ??
-    within(dialog).queryByRole('button', { name: /dismiss/i }) ??
-    within(dialog).getByRole('button', { name: /cancel|no|close|dismiss/i });
+  const cancelButton = within(dialog).getByRole('button', { name: /cancel|close/i });
   await user.click(cancelButton);
 }
 
@@ -272,7 +251,7 @@ it('cancels delete in modal and keeps the task', async () => {
   expect(screen.getByText('Keep me')).toBeInTheDocument();
 });
 
-it('undo restores a deleted task (using fake timers)', async () => {
+it('undo restores a deleted task (toast action "Undo")', async () => {
   vi.useFakeTimers();
 
   const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -284,21 +263,19 @@ it('undo restores a deleted task (using fake timers)', async () => {
 
   expect(screen.queryByText('Undo me')).not.toBeInTheDocument();
 
-  const undoButton =
-    screen.queryByRole('button', { name: /undo/i }) ??
-    screen.queryByRole('button', { name: /restore/i });
-  expect(undoButton).toBeInTheDocument();
-
+  const undoButton = await screen.findByRole('button', { name: /^undo$/i });
   await user.click(undoButton);
 
+  // Advance timers to flush any queued state updates/timeouts used by the toast/undo flow.
   await act(async () => {
     vi.runOnlyPendingTimers();
+    vi.advanceTimersByTime(1);
   });
 
   expect(screen.getByText('Undo me')).toBeInTheDocument();
 });
 
-it('search filters tasks and filter by priority shows only matching tasks (if exposed)', async () => {
+it('search filters tasks (aria-label "Search tasks")', async () => {
   const user = userEvent.setup();
   render(<App />);
 
@@ -307,8 +284,6 @@ it('search filters tasks and filter by priority shows only matching tasks (if ex
   await addTask(user, { title: 'Charlie task', priority: 'Low' });
 
   const searchInput = getSearchInput();
-  expect(searchInput).toBeInTheDocument();
-
   await user.clear(searchInput);
   await user.type(searchInput, 'bravo');
 
@@ -320,26 +295,65 @@ it('search filters tasks and filter by priority shows only matching tasks (if ex
   expect(screen.getByText('Alpha task')).toBeInTheDocument();
   expect(screen.getByText('Bravo task')).toBeInTheDocument();
   expect(screen.getByText('Charlie task')).toBeInTheDocument();
+});
 
-  const filterControl = getFilterControl();
-  if (!filterControl) return;
+it('filters by status (aria-label "Filter by status")', async () => {
+  const user = userEvent.setup();
+  render(<App />);
 
-  if (filterControl.tagName.toLowerCase() === 'select') {
-    const opts = within(filterControl).getAllByRole('option');
-    const highOpt = opts.find(
-      (o) =>
-        /high/i.test(o.textContent ?? '') || /high/i.test(o.getAttribute('value') ?? '')
-    );
-    if (highOpt) {
-      await user.selectOptions(
-        filterControl,
-        highOpt.getAttribute('value') ?? highOpt.textContent ?? ''
-      );
-      expect(screen.getByText('Bravo task')).toBeInTheDocument();
-      expect(screen.queryByText('Alpha task')).not.toBeInTheDocument();
-      expect(screen.queryByText('Charlie task')).not.toBeInTheDocument();
-    }
-  } else {
-    expect(filterControl).toBeInTheDocument();
-  }
+  await addTask(user, { title: 'Do soon', priority: 'Low' });
+  await addTask(user, { title: 'Do later', priority: 'High' });
+
+  const statusFilter = getStatusFilterControl();
+  // We don't assume exact option labels; we select by value when possible.
+  // "completed" is a common status key; adjust if your UI uses different values.
+  await user.selectOptions(statusFilter, 'completed');
+
+  // When filtering to completed, newly-added tasks (typically active) should not show.
+  expect(screen.queryByText('Do soon')).not.toBeInTheDocument();
+  expect(screen.queryByText('Do later')).not.toBeInTheDocument();
+
+  await user.selectOptions(statusFilter, 'all');
+  expect(screen.getByText('Do soon')).toBeInTheDocument();
+  expect(screen.getByText('Do later')).toBeInTheDocument();
+});
+
+it('filters by priority (aria-label "Filter by priority")', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await addTask(user, { title: 'Alpha task', priority: 'Low' });
+  await addTask(user, { title: 'Bravo task', priority: 'High' });
+  await addTask(user, { title: 'Charlie task', priority: 'Low' });
+
+  const priorityFilter = getPriorityFilterControl();
+  await user.selectOptions(priorityFilter, 'High');
+
+  expect(screen.getByText('Bravo task')).toBeInTheDocument();
+  expect(screen.queryByText('Alpha task')).not.toBeInTheDocument();
+  expect(screen.queryByText('Charlie task')).not.toBeInTheDocument();
+
+  await user.selectOptions(priorityFilter, 'All');
+  expect(screen.getByText('Alpha task')).toBeInTheDocument();
+  expect(screen.getByText('Bravo task')).toBeInTheDocument();
+  expect(screen.getByText('Charlie task')).toBeInTheDocument();
+});
+
+it('sorts tasks (aria-label "Sort by") and supports known sort keys (createdAtDesc)', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await addTaskWithDefaultPriority(user, { title: 'First' });
+  await addTaskWithDefaultPriority(user, { title: 'Second' });
+  await addTaskWithDefaultPriority(user, { title: 'Third' });
+
+  const sortBy = getSortByControl();
+  await user.selectOptions(sortBy, 'createdAtDesc');
+
+  // With createdAtDesc, newest should appear first in the rendered list.
+  const third = screen.getByText('Third');
+  const second = screen.getByText('Second');
+
+  // If these are in a list, document position should reflect sort order.
+  expect(third.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
