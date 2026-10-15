@@ -1,103 +1,76 @@
-import { useEffect, useState } from 'react';
-
-const STATUSES = ['To Do', 'In Progress', 'Done'];
-const EMPTY = { title: '', description: '', status: 'To Do' };
+import { useMemo, useState } from 'react';
+import TaskForm from './components/TaskForm';
+import TaskList from './components/TaskList';
+import Toolbar from './components/Toolbar';
+import useTasks from './hooks/useTasks';
+import selectVisibleTasks from './selectors/selectVisibleTasks';
 
 export default function App() {
-  const [tasks, setTasks] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('tasks')) ?? [];
-    } catch {
-      return [];
-    }
-  });
-  const [form, setForm] = useState(EMPTY);
+  const { tasks, addTask, updateTask, deleteTask } = useTasks();
+
   const [editingId, setEditingId] = useState(null);
-  const [error, setError] = useState('');
 
-  useEffect(() => {
-    localStorage.setItem('tasks', JSON.stringify(tasks));
-  }, [tasks]);
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState('All');
+  const [sort, setSort] = useState('Newest');
 
-  const change = (field) => (e) => setForm({ ...form, [field]: e.target.value });
+  const editingTask = useMemo(
+    () => (editingId ? tasks.find((t) => t.id === editingId) ?? null : null),
+    [editingId, tasks],
+  );
 
-  function submit(e) {
-    e.preventDefault();
-    const title = form.title.trim();
-    if (!title) return setError('Title is required.');
-    const task = { ...form, title };
-    setTasks(
-      editingId
-        ? tasks.map((t) => (t.id === editingId ? { ...t, ...task } : t))
-        : [{ ...task, id: Date.now() }, ...tasks],
-    );
-    reset();
-  }
+  const visibleTasks = useMemo(
+    () => selectVisibleTasks(tasks, { query, status, sort }),
+    [tasks, query, status, sort],
+  );
 
-  function reset() {
-    setForm(EMPTY);
-    setEditingId(null);
-    setError('');
-  }
-
-  function edit(task) {
-    setForm(task);
+  function startEdit(task) {
     setEditingId(task.id);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  function submit(task) {
+    if (editingId) {
+      updateTask(editingId, task);
+      cancelEdit();
+      return;
+    }
+
+    addTask(task);
   }
 
   function remove(task) {
     if (!window.confirm(`Delete "${task.title}"?`)) return;
-    setTasks(tasks.filter((t) => t.id !== task.id));
-    if (editingId === task.id) reset();
+
+    deleteTask(task.id);
+
+    if (editingId === task.id) {
+      cancelEdit();
+    }
   }
 
   return (
     <main>
       <h1>Task Manager</h1>
 
-      <form onSubmit={submit} aria-label="Task form">
-        <label>
-          Title
-          <input value={form.title} onChange={change('title')} />
-        </label>
-        {error && <p role="alert">{error}</p>}
-        <label>
-          Description
-          <textarea value={form.description} onChange={change('description')} />
-        </label>
-        <label>
-          Status
-          <select value={form.status} onChange={change('status')}>
-            {STATUSES.map((s) => (
-              <option key={s}>{s}</option>
-            ))}
-          </select>
-        </label>
-        <div>
-          <button type="submit">{editingId ? 'Save' : 'Add'}</button>
-          {editingId && (
-            <button type="button" onClick={reset}>
-              Cancel
-            </button>
-          )}
-        </div>
-      </form>
+      <Toolbar
+        query={query}
+        onQueryChange={setQuery}
+        status={status}
+        onStatusChange={setStatus}
+        sort={sort}
+        onSortChange={setSort}
+      />
+
+      <TaskForm task={editingTask} onSubmit={submit} onCancel={cancelEdit} />
 
       {tasks.length === 0 && <p>No tasks yet.</p>}
-      <ul>
-        {tasks.map((task) => (
-          <li key={task.id}>
-            <div>
-              <strong>{task.title}</strong> <small>({task.status})</small>
-              {task.description && <p>{task.description}</p>}
-            </div>
-            <div>
-              <button onClick={() => edit(task)}>Edit</button>
-              <button onClick={() => remove(task)}>Delete</button>
-            </div>
-          </li>
-        ))}
-      </ul>
+      {tasks.length > 0 && visibleTasks.length === 0 && <p>No tasks match your filters.</p>}
+
+      <TaskList tasks={visibleTasks} onEdit={startEdit} onDelete={remove} />
     </main>
   );
 }
