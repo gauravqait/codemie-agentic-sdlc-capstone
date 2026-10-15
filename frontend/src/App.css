@@ -19,6 +19,17 @@ li {
   margin-bottom: 12px;
 }
 
+section[aria-label='Task filters'] {
+  background: #fff;
+  border: 1px solid #d9dee8;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
 label {
   display: block;
   margin-bottom: 8px;
@@ -32,6 +43,14 @@ select {
   width: 100%;
   padding: 6px;
   font: inherit;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  outline: 3px solid #2f6fec;
+  outline-offset: 2px;
 }
 
 ul {
