@@ -26,15 +26,19 @@ function getTaskItemByTitle(title) {
 }
 
 function getToolbar() {
-  return (
-    screen.queryByRole('region', { name: /toolbar/i }) ??
-    screen.queryByRole('group', { name: /toolbar/i }) ??
-    screen.getByRole('main')
-  );
+  return screen.getByRole('region', { name: /task controls/i });
 }
 
-async function add(user, title) {
+async function setStatusInForm(user, status) {
+  // Status is selected via TaskForm select in the implemented UI.
+  await user.selectOptions(screen.getByLabelText(/status/i), status);
+}
+
+async function add(user, title, { status } = {}) {
   // Keep Task form label and Title label per requirements.
+  if (status) {
+    await setStatusInForm(user, status);
+  }
   await user.type(screen.getByLabelText('Title'), title);
   await user.click(screen.getByRole('button', { name: /add/i }));
 }
@@ -116,29 +120,23 @@ it('does not delete a task if confirmation is cancelled', async () => {
 it('filters by status', async () => {
   const user = userEvent.setup();
   render(<App />);
-  await add(user, 'Active task');
-  await add(user, 'Done task');
 
-  // Mark "Done task" complete using an accessible checkbox (common pattern).
-  const doneItem = getTaskItemByTitle('Done task');
-  const toggle =
-    within(doneItem).queryByRole('checkbox', { name: /done|complete|completed|status/i }) ??
-    within(doneItem).getByRole('checkbox');
-  await user.click(toggle);
+  await add(user, 'To do task', { status: 'To Do' });
+  await add(user, 'Done task', { status: 'Done' });
 
   const toolbar = getToolbar();
   const filter = within(toolbar).getByLabelText(/filter by status/i);
 
-  await user.selectOptions(filter, 'completed');
-  expect(screen.queryByText('Active task')).not.toBeInTheDocument();
+  await user.selectOptions(filter, 'Done');
+  expect(screen.queryByText('To do task')).not.toBeInTheDocument();
   expect(screen.getByText('Done task')).toBeInTheDocument();
 
-  await user.selectOptions(filter, 'active');
-  expect(screen.getByText('Active task')).toBeInTheDocument();
+  await user.selectOptions(filter, 'To Do');
+  expect(screen.getByText('To do task')).toBeInTheDocument();
   expect(screen.queryByText('Done task')).not.toBeInTheDocument();
 
-  await user.selectOptions(filter, 'all');
-  expect(screen.getByText('Active task')).toBeInTheDocument();
+  await user.selectOptions(filter, 'All');
+  expect(screen.getByText('To do task')).toBeInTheDocument();
   expect(screen.getByText('Done task')).toBeInTheDocument();
 });
 
@@ -186,7 +184,6 @@ it('changes sort order via Sort control', async () => {
   const toolbar = getToolbar();
   const sort = within(toolbar).getByLabelText(/sort/i);
 
-  // Try common values; if your app uses different option values, adjust accordingly.
   await user.selectOptions(sort, 'oldest');
 
   const container = getTaskList();
