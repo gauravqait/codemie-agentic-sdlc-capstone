@@ -1,0 +1,126 @@
+{
+  "meta": {
+    "generatedAt": "2026-10-07T06:10:30.199Z",
+    "rangeLabel": "all",
+    "agents": [
+      "claude"
+    ],
+    "projectFilter": "all",
+    "totals": {
+      "sessions": 1,
+      "durationMs": 12566,
+      "turns": 1,
+      "files": 0,
+      "netLines": 0,
+      "toolCallsTotal": 0,
+      "toolSuccessRate": 0,
+      "totalCostUSD": 0.112996,
+      "cacheReadCostUSD": 0,
+      "pricedSessions": 1
+    },
+    "unpricedModels": [],
+    "estimatedModels": [],
+    "localModels": [],
+    "coverage": [
+      {
+        "agentName": "claude",
+        "total": 1,
+        "priced": 1,
+        "withLog": 1
+      }
+    ],
+    "periodStart": "2026-10-07T06:09:49.231Z",
+    "periodEnd": "2026-10-07T06:10:01.797Z"
+  },
+  "sessions": [
+    {
+      "sessionId": "7d5c981d-b8ba-4c7e-b5b6-57d0fc20b498",
+      "agentName": "claude",
+      "provider": "ai-run-sso",
+      "title": "You are the Requirements/BA assistant. Generate: (1) brief gap analysis for a baseline CRUD Helpdesk Ticket app, (2) 1 EPIC, (3) 6 user stories with acceptance criteria in Gherkin-style bullets, (4) tasks/subtasks per story. Keep it Jira-ready with IDs HD-EPIC-1, HD-1..HD-6. Prioritize for a 1-day demo with human-in-the-loop checkpoints.",
+      "project": "C:\\Users\\GauravAgarwal\\Desktop\\Project\\Capstone\\Codemie\\codemie-ai-assisted-sdlc-capstone",
+      "branch": "master",
+      "startTime": 1791353389231,
+      "durationMs": 12566,
+      "turns": 1,
+      "fileOps": 0,
+      "linesAdded": 0,
+      "linesRemoved": 0,
+      "linesModified": 0,
+      "netLines": 0,
+      "filesChanged": 0,
+      "filesWritten": 0,
+      "filesEdited": 0,
+      "toolCallsTotal": 0,
+      "toolCallsSuccess": 0,
+      "toolCallsFailure": 0,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "languages": [],
+      "tools": [],
+      "tokens": {
+        "input": 2,
+        "output": 3660,
+        "cacheRead": 0,
+        "cacheCreation": 19098,
+        "cacheCreation1h": 19098,
+        "total": 22760
+      },
+      "costUSD": 0.112996,
+      "cacheReadCostUSD": 0,
+      "perModelCost": [
+        {
+          "model": "claude-sonnet-5-5",
+          "tokens": {
+            "input": 2,
+            "output": 3660,
+            "cacheRead": 0,
+            "cacheCreation": 19098,
+            "cacheCreation1h": 19098,
+            "total": 22760
+          },
+          "costUSD": 0.112996,
+          "unpriced": false
+        }
+      ],
+      "hadLog": true,
+      "agentSessionFile": "C:\\Users\\GauravAgarwal\\.claude\\projects\\C--Users-GauravAgarwal-Desktop-Project-Capstone-Codemie-codemie-ai-assisted-sdlc-capstone\\95665527-d594-4101-a493-567a6c0ff54c.jsonl",
+      "costSource": "native-estimate",
+      "costBasis": "standard-api-tokens",
+      "dispatchesComplete": true,
+      "rootOwnCostUSD": 0.112996,
+      "unlinkedCostUSD": 0,
+      "unlinkedAgentIds": [],
+      "rootOwnTokens": {
+        "input": 2,
+        "output": 3660,
+        "cacheRead": 0,
+        "cacheCreation": 19098,
+        "cacheCreation1h": 19098,
+        "total": 22760
+      },
+      "unlinkedTokens": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheCreation": 0,
+        "cacheCreation1h": 0,
+        "total": 0
+      },
+      "modelTimeline": [
+        {
+          "t": 1791353422399,
+          "model": "claude-sonnet-5-5",
+          "costUSD": 0.112996,
+          "tokens": 22760
+        }
+      ],
+      "routedTurnsPct": 0,
+      "skillInvocations": [],
+      "agentInvocations": [],
+      "commandInvocations": [],
+      "sessionSource": "Pure chat"
+    }
+  ]
+}

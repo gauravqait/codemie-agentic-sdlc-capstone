@@ -1,2 +1,1 @@
-# codemie-agentic-sdlc-capstone
-codemie-agentic-sdlc-capstone
+# AI-Assistant-Driven SDLC Capstone
