@@ -54,3 +54,59 @@ li p {
   color: #c62f3b;
   margin: 0 0 8px;
 }
+
+/* Banner (error) */
+.banner {
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 0 0 12px;
+  border: 1px solid #f1b3b8;
+  background: #fff2f3;
+  color: #8e1e27;
+}
+
+.banner strong {
+  font-weight: 700;
+}
+
+.banner a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+/* Filters row */
+.filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.filters-row > * {
+  flex: 1 1 160px;
+}
+
+.filters-row label {
+  margin-bottom: 6px;
+}
+
+/* Field error text */
+.field-error {
+  margin: 6px 0 0;
+  font-size: 0.9rem;
+  color: #c62f3b;
+}
+
+input[aria-invalid='true'],
+textarea[aria-invalid='true'],
+select[aria-invalid='true'] {
+  border-color: #c62f3b;
+  outline: none;
+}
+
+input[aria-invalid='true']:focus,
+textarea[aria-invalid='true']:focus,
+select[aria-invalid='true']:focus {
+  box-shadow: 0 0 0 3px rgba(198, 47, 59, 0.18);
+}
