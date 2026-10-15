@@ -1,17 +1,16 @@
 import { useEffect, useId, useMemo, useState } from 'react';
-import { load, save } from './persistence/storage.js';
-import { createTask, updateTask } from './domain/tasks.js';
-import { selectVisibleTasks } from './domain/selectors.js';
-
-const STATUSES = ['To Do', 'In Progress', 'Done'];
-const EMPTY_FORM = { title: '', description: '', status: 'To Do' };
+import { loadState, saveState } from './persistence/storage.js';
+import { createTask, updateTask } from './domain/taskService.js';
+import { STATUSES, EMPTY_FORM } from './domain/taskTypes.js';
+import { validateTask } from './domain/validation.js';
+import { selectVisibleTasks } from './selectors.js';
 
 export default function App() {
   const titleErrorId = useId();
   const descriptionErrorId = useId();
   const statusErrorId = useId();
 
-  const [tasks, setTasks] = useState(() => load());
+  const [tasks, setTasks] = useState(() => loadState().tasks);
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState(null);
 
@@ -21,10 +20,10 @@ export default function App() {
     status: '',
   });
 
-  const [filters, setFilters] = useState({ status: 'All', keyword: '' });
+  const [filters, setFilters] = useState({ status: 'All', query: '' });
 
   useEffect(() => {
-    save(tasks);
+    saveState({ version: 1, tasks });
   }, [tasks]);
 
   const visibleTasks = useMemo(() => selectVisibleTasks(tasks, filters), [tasks, filters]);
@@ -35,16 +34,16 @@ export default function App() {
     setFieldErrors((prev) => (prev[field] ? { ...prev, [field]: '' } : prev));
   };
 
-  const changeFilter = (field) => (e) =>
-    setFilters((prev) => ({ ...prev, [field]: e.target.value }));
+  const changeFilter = (field) => (e) => setFilters((prev) => ({ ...prev, [field]: e.target.value }));
 
   function validate(nextForm) {
-    const errors = { title: '', description: '', status: '' };
+    const errors = validateTask(nextForm);
 
+    // Ensure we always return the shape this component expects.
     const title = nextForm.title.trim();
-    if (!title) errors.title = 'Title is required.';
 
-    if (!STATUSES.includes(nextForm.status)) errors.status = 'Invalid status.';
+    // Defense-in-depth in case validation module doesn't cover this.
+    if (!STATUSES.includes(nextForm.status)) errors.status = errors.status || 'Invalid status.';
 
     return { ok: !errors.title && !errors.description && !errors.status, errors, normalizedTitle: title };
   }
@@ -174,11 +173,7 @@ export default function App() {
 
         <label>
           Search
-          <input
-            value={filters.keyword}
-            onChange={changeFilter('keyword')}
-            placeholder="Search tasks"
-          />
+          <input value={filters.query} onChange={changeFilter('query')} placeholder="Search tasks" />
         </label>
       </section>
 
