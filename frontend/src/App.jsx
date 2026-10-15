@@ -3,7 +3,7 @@ import { loadState, saveState } from './persistence/storage.js';
 import { createTask, updateTask } from './domain/taskService.js';
 import { STATUSES, EMPTY_FORM } from './domain/taskTypes.js';
 import { validateTask } from './domain/validation.js';
-import { selectVisibleTasks } from './selectors.js';
+import { selectVisibleTasks } from './domain/selectors.js';
 
 export default function App() {
   const titleErrorId = useId();
@@ -37,13 +37,20 @@ export default function App() {
   const changeFilter = (field) => (e) => setFilters((prev) => ({ ...prev, [field]: e.target.value }));
 
   function validate(nextForm) {
-    const errors = validateTask(nextForm);
+    const baseErrors = validateTask(nextForm);
 
     // Ensure we always return the shape this component expects.
     const title = nextForm.title.trim();
 
-    // Defense-in-depth in case validation module doesn't cover this.
-    if (!STATUSES.includes(nextForm.status)) errors.status = errors.status || 'Invalid status.';
+    // validateTask is expected not to set status errors. Keep local status support here.
+    const errors = {
+      title: baseErrors.title || '',
+      description: baseErrors.description || '',
+      status: '',
+    };
+
+    // Defense-in-depth for status validation.
+    if (!STATUSES.includes(nextForm.status)) errors.status = 'Invalid status.';
 
     return { ok: !errors.title && !errors.description && !errors.status, errors, normalizedTitle: title };
   }
