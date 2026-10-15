@@ -24,11 +24,25 @@ function isStoredStateV1(value) {
 
 function normalizeLegacyTask(t) {
   const now = nowIso();
+
+  const rawId = t?.id;
+  const id =
+    typeof rawId === 'string'
+      ? rawId
+      : typeof rawId === 'number' && Number.isFinite(rawId)
+        ? String(rawId)
+        : createTaskId();
+
+  const status =
+    t?.status === 'To Do' || t?.status === 'In Progress' || t?.status === 'Done'
+      ? t.status
+      : 'To Do';
+
   return {
-    id: typeof t?.id === 'string' ? t.id : createTaskId(),
+    id,
     title: String(t?.title ?? ''),
     description: String(t?.description ?? ''),
-    status: t?.status === 'In Progress' || t?.status === 'Done' ? t.status : 'To Do',
+    status,
     createdAt: typeof t?.createdAt === 'string' ? t.createdAt : now,
     updatedAt: typeof t?.updatedAt === 'string' ? t.updatedAt : now,
   };
@@ -37,6 +51,12 @@ function normalizeLegacyTask(t) {
 export function loadState() {
   const parsed = safeParse(localStorage.getItem(STORAGE_KEY));
   if (isStoredStateV1(parsed)) return parsed;
+
+  // If a value exists under STORAGE_KEY but is invalid, do not overwrite it.
+  const hasInvalidStoredState = localStorage.getItem(STORAGE_KEY) != null;
+  if (hasInvalidStoredState) {
+    return { version: CURRENT_VERSION, tasks: [] };
+  }
 
   // Try legacy format: localStorage['tasks'] = Task[]
   const legacy = safeParse(localStorage.getItem(LEGACY_TASKS_KEY));
