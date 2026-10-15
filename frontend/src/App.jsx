@@ -1,14 +1,14 @@
 import { useCallback, useId, useMemo, useRef, useState } from 'react';
-import ConfirmDialog from './components/ConfirmDialog';
-import Toast from './components/Toast';
+import ConfirmDialog from './components/ConfirmDialog.jsx';
+import Toast from './components/Toast.jsx';
 
 import { PRIORITIES, STATUSES, createTask, updateTask } from './domain/taskModel.js';
-import { validateTaskDraft } from './domain/taskValidation.js';
+import { emptyFormValues, firstErrorField, validateTaskForm } from './domain/taskValidation.js';
 import { selectVisibleTasks } from './domain/taskSelectors.js';
-import { shouldConfirmDoneToInProgress } from './domain/taskTransitions.js';
+import { checkTransition } from './domain/taskTransitions.js';
 import { loadTasks, saveTasks } from './storage/tasksStorage.js';
 
-const EMPTY = {
+const EMPTY = emptyFormValues ?? {
   title: '',
   description: '',
   status: 'To Do',
@@ -51,14 +51,15 @@ export default function App() {
   const [form, setForm] = useState(EMPTY);
   const [editingId, setEditingId] = useState(null);
 
-  const [touched, setTouched] = useState({ title: false, dueDate: false });
-  const [errors, setErrors] = useState({ title: '', dueDate: '' });
+  const [touched, setTouched] = useState({});
+  const [errors, setErrors] = useState({});
 
-  const [search, setSearch] = useState('');
-  const [filterStatus, setFilterStatus] = useState('All');
-  const [filterPriority, setFilterPriority] = useState('All');
-  const [sortBy, setSortBy] = useState('updatedAt');
-  const [sortDir, setSortDir] = useState('desc');
+  const [query, setQuery] = useState({
+    q: '',
+    status: 'All',
+    priority: 'All',
+    sort: 'updatedAt',
+  });
 
   const [confirm, setConfirm] = useState({
     open: false,
@@ -90,7 +91,7 @@ export default function App() {
 
   const validate = useCallback(
     (nextForm = form) => {
-      const nextErrors = validateTaskDraft?.(nextForm) ?? { title: '', dueDate: '' };
+      const nextErrors = validateTaskForm?.(nextForm) ?? {};
       setErrors(nextErrors);
       return nextErrors;
     },
@@ -98,11 +99,12 @@ export default function App() {
   );
 
   const focusFirstError = useCallback((nextErrors) => {
-    if (nextErrors?.title) {
+    const field = firstErrorField?.(nextErrors);
+    if (field === 'title') {
       titleInputRef.current?.focus();
       return;
     }
-    if (nextErrors?.dueDate) {
+    if (field === 'dueDate') {
       dueDateInputRef.current?.focus?.();
     }
   }, []);
@@ -119,53 +121,25 @@ export default function App() {
   const reset = useCallback(() => {
     setForm(EMPTY);
     setEditingId(null);
-    setTouched({ title: false, dueDate: false });
-    setErrors({ title: '', dueDate: '' });
+    setTouched({});
+    setErrors({});
   }, []);
 
   const change = useCallback(
     (field) => (e) => {
       const value = e.target.value;
 
-      if (field === 'status') {
-        const nextStatus = value;
-
-        if (editingId) {
-          const currentTask = tasks.find((t) => t.id === editingId);
-          const previousStatus = currentTask?.status ?? form.status;
-
-          const needsConfirm =
-            shouldConfirmDoneToInProgress?.(previousStatus, nextStatus) ??
-            (previousStatus === 'Done' && nextStatus === 'In Progress');
-
-          if (needsConfirm) {
-            setPendingStatusChange({ previousStatus, nextStatus });
-            setConfirm({
-              open: true,
-              title: 'Move task back to In Progress?',
-              message: 'This task is marked Done. Are you sure you want to move it back to In Progress?',
-              confirmLabel: 'Yes, move',
-              cancelLabel: 'Keep Done',
-              onConfirm: () => {
-                setForm((prev) => ({ ...prev, status: 'In Progress' }));
-                setPendingStatusChange(null);
-                setConfirm((c) => ({ ...c, open: false, onConfirm: null }));
-              },
-            });
-            return;
-          }
-        }
-      }
-
       const next = { ...form, [field]: value };
       setForm(next);
 
-      if (field === 'title' || field === 'dueDate') {
-        setTouched((t) => ({ ...t, [field]: true }));
-        validate(next);
-      }
+      // Field-level validation
+      setTouched((t) => ({ ...t, [field]: true }));
+      const nextErrors = validate(next);
+
+      // If user fixes a field, keep the rest as-is; validate() already sets full error map.
+      return nextErrors;
     },
-    [editingId, form, tasks, validate]
+    [form, validate]
   );
 
   const onBlur = useCallback(
@@ -182,20 +156,50 @@ export default function App() {
 
       const trimmed = { ...form, title: (form.title ?? '').trim() };
       const nextErrors = validate(trimmed);
-      setTouched({ title: true, dueDate: true });
 
-      if (nextErrors.title || nextErrors.dueDate) {
+      // mark all fields as touched so errors show on submit
+      setTouched((t) => ({ ...t, ...Object.keys(trimmed).reduce((acc, k) => ({ ...acc, [k]: true }), {}) }));
+
+      if (Object.keys(nextErrors ?? {}).length > 0) {
         focusFirstError(nextErrors);
         return;
       }
 
+      const currentTask = editingId ? tasks.find((t) => t.id === editingId) : null;
+      const fromStatus = currentTask?.status;
+      const toStatus = trimmed.status;
+
+      const needsConfirm =
+        !!editingId &&
+        fromStatus != null &&
+        toStatus != null &&
+        checkTransition?.(fromStatus, toStatus) === 'confirm';
+
+      if (needsConfirm) {
+        setPendingStatusChange({ previousStatus: fromStatus, nextStatus: toStatus });
+        setConfirm({
+          open: true,
+          title: 'Move task back to In Progress?',
+          message: 'This task is marked Done. Are you sure you want to move it back to In Progress?',
+          confirmLabel: 'Yes, move',
+          cancelLabel: 'Keep Done',
+          onConfirm: () => {
+            applyAndPersistTasks((prev) =>
+              prev.map((t) => (t.id === editingId ? updateTask?.(t, trimmed) ?? { ...t, ...trimmed } : t))
+            );
+            setPendingStatusChange(null);
+            setConfirm((c) => ({ ...c, open: false, onConfirm: null }));
+            reset();
+            titleInputRef.current?.focus();
+          },
+        });
+        return;
+      }
+
       if (editingId) {
-        const updated = updateTask?.(tasks, editingId, trimmed) ?? null;
-        if (Array.isArray(updated)) {
-          applyAndPersistTasks(updated);
-        } else {
-          applyAndPersistTasks((prev) => prev.map((t) => (t.id === editingId ? { ...t, ...trimmed } : t)));
-        }
+        applyAndPersistTasks((prev) =>
+          prev.map((t) => (t.id === editingId ? updateTask?.(t, trimmed) ?? { ...t, ...trimmed } : t))
+        );
       } else {
         const created = createTask?.(trimmed) ?? null;
         if (created) {
@@ -232,8 +236,8 @@ export default function App() {
     });
 
     setEditingId(task.id ?? null);
-    setTouched({ title: false, dueDate: false });
-    setErrors({ title: '', dueDate: '' });
+    setTouched({});
+    setErrors({});
 
     requestAnimationFrame(() => titleInputRef.current?.focus());
   }, []);
@@ -275,13 +279,12 @@ export default function App() {
   );
 
   const visibleTasks = useMemo(() => {
-    const params = { search, filterStatus, filterPriority, sortBy, sortDir };
-    const selected = selectVisibleTasks?.(tasks, params);
+    const selected = selectVisibleTasks?.(tasks, query);
     return Array.isArray(selected) ? selected : tasks;
-  }, [tasks, search, filterStatus, filterPriority, sortBy, sortDir]);
+  }, [tasks, query]);
 
-  const showTitleError = touched.title && !!errors.title;
-  const showDueDateError = touched.dueDate && !!errors.dueDate;
+  const showTitleError = !!touched.title && !!errors.title;
+  const showDueDateError = !!touched.dueDate && !!errors.dueDate;
 
   return (
     <main>
@@ -292,8 +295,8 @@ export default function App() {
           <label>
             Search
             <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={query.q}
+              onChange={(e) => setQuery((prev) => ({ ...prev, q: e.target.value }))}
               placeholder="Search title/description"
               aria-label="Search tasks"
             />
@@ -303,7 +306,11 @@ export default function App() {
         <div>
           <label>
             Filter status
-            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} aria-label="Filter by status">
+            <select
+              value={query.status}
+              onChange={(e) => setQuery((prev) => ({ ...prev, status: e.target.value }))}
+              aria-label="Filter by status"
+            >
               <option value="All">All</option>
               {STATUSES.map((s) => (
                 <option key={s} value={s}>
@@ -316,8 +323,8 @@ export default function App() {
           <label>
             Filter priority
             <select
-              value={filterPriority}
-              onChange={(e) => setFilterPriority(e.target.value)}
+              value={query.priority}
+              onChange={(e) => setQuery((prev) => ({ ...prev, priority: e.target.value }))}
               aria-label="Filter by priority"
             >
               <option value="All">All</option>
@@ -331,21 +338,17 @@ export default function App() {
 
           <label>
             Sort by
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label="Sort by">
+            <select
+              value={query.sort}
+              onChange={(e) => setQuery((prev) => ({ ...prev, sort: e.target.value }))}
+              aria-label="Sort by"
+            >
               <option value="updatedAt">Updated</option>
               <option value="createdAt">Created</option>
               <option value="dueDate">Due date</option>
               <option value="priority">Priority</option>
               <option value="status">Status</option>
               <option value="title">Title</option>
-            </select>
-          </label>
-
-          <label>
-            Direction
-            <select value={sortDir} onChange={(e) => setSortDir(e.target.value)} aria-label="Sort direction">
-              <option value="desc">Desc</option>
-              <option value="asc">Asc</option>
             </select>
           </label>
         </div>
@@ -444,9 +447,9 @@ export default function App() {
       <ConfirmDialog
         open={confirm.open}
         title={confirm.title}
-        message={confirm.message}
-        confirmLabel={confirm.confirmLabel}
-        cancelLabel={confirm.cancelLabel}
+        description={confirm.message}
+        confirmText={confirm.confirmLabel}
+        cancelText={confirm.cancelLabel}
         onConfirm={() => confirm.onConfirm?.()}
         onCancel={closeConfirm}
         onClose={closeConfirm}
