@@ -1,10 +1,13 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useId, useMemo, useRef, useState } from 'react';
 import ConfirmDialog from './components/ConfirmDialog';
 import Toast from './components/Toast';
-import { tasksStorage } from './storage/tasksStorage';
 
-const STATUSES = ['To Do', 'In Progress', 'Done'];
-const PRIORITIES = ['Low', 'Medium', 'High'];
+import { PRIORITIES, STATUSES } from './domain/constants';
+import { createTask, updateTask } from './domain/tasks';
+import { loadTasks, saveTasks } from './storage/tasksStorage';
+import { selectVisibleTasks } from './selectors/tasksSelectors';
+import { validateTaskDraft } from './validation/taskValidation';
+import { shouldConfirmDoneToInProgress } from './transitions/taskTransitions';
 
 const EMPTY = {
   title: '',
@@ -14,43 +17,22 @@ const EMPTY = {
   dueDate: '',
 };
 
-function normalizeStoredTask(t) {
-  const now = Date.now();
-  return {
-    id: t?.id ?? now,
-    title: typeof t?.title === 'string' ? t.title : '',
-    description: typeof t?.description === 'string' ? t.description : '',
-    status: STATUSES.includes(t?.status) ? t.status : 'To Do',
-    priority: PRIORITIES.includes(t?.priority) ? t.priority : 'Medium',
-    dueDate: typeof t?.dueDate === 'string' ? t.dueDate : '',
-    createdAt: typeof t?.createdAt === 'number' ? t.createdAt : now,
-    updatedAt: typeof t?.updatedAt === 'number' ? t.updatedAt : now,
-  };
+function safeLoadTasks() {
+  try {
+    const loaded = loadTasks?.();
+    return Array.isArray(loaded) ? loaded : [];
+  } catch {
+    return [];
+  }
 }
 
-function containsInsensitive(haystack, needle) {
-  return haystack.toLowerCase().includes(needle.toLowerCase());
+function safeSaveTasks(nextTasks) {
+  try {
+    saveTasks?.(nextTasks);
+  } catch {
+    // ignore persistence errors to avoid breaking UI
+  }
 }
-
-function isValidISODateInput(value) {
-  if (!value) return true; // optional
-  // HTML date input returns yyyy-mm-dd
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
-}
-
-function compare(a, b) {
-  if (a < b) return -1;
-  if (a > b) return 1;
-  return 0;
-}
-
-function getDueDateTimestamp(dueDate) {
-  if (!dueDate) return Number.POSITIVE_INFINITY;
-  const ts = Date.parse(dueDate);
-  return Number.isFinite(ts) ? ts : Number.POSITIVE_INFINITY;
-}
-
-const PRIORITY_RANK = { Low: 1, Medium: 2, High: 3 };
 
 export default function App() {
   const titleId = useId();
@@ -63,17 +45,9 @@ export default function App() {
   const dueDateErrorId = useId();
 
   const titleInputRef = useRef(null);
-  const searchInputRef = useRef(null);
+  const dueDateInputRef = useRef(null);
 
-  const [tasks, setTasks] = useState(() => {
-    try {
-      const loaded = tasksStorage.load?.();
-      const arr = Array.isArray(loaded) ? loaded : [];
-      return arr.map(normalizeStoredTask);
-    } catch {
-      return [];
-    }
-  });
+  const [tasks, setTasks] = useState(() => safeLoadTasks());
 
   const [form, setForm] = useState(EMPTY);
   const [editingId, setEditingId] = useState(null);
@@ -107,47 +81,47 @@ export default function App() {
   const [pendingStatusChange, setPendingStatusChange] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
 
-  useEffect(() => {
-    try {
-      tasksStorage.save?.(tasks);
-    } catch {
-      // ignore persistence errors to avoid breaking UI
-    }
-  }, [tasks]);
+  function applyAndPersistTasks(updater) {
+    setTasks((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      safeSaveTasks(next);
+      return next;
+    });
+  }
 
   function validate(nextForm = form) {
-    const nextErrors = { title: '', dueDate: '' };
-
-    const title = (nextForm.title ?? '').trim();
-    if (!title) nextErrors.title = 'Title is required.';
-
-    if (!isValidISODateInput(nextForm.dueDate ?? '')) nextErrors.dueDate = 'Due date must be a valid date.';
-
+    const nextErrors = validateTaskDraft?.(nextForm) ?? { title: '', dueDate: '' };
     setErrors(nextErrors);
     return nextErrors;
   }
 
   function focusFirstError(nextErrors) {
-    if (nextErrors.title) {
+    if (nextErrors?.title) {
       titleInputRef.current?.focus();
       return;
     }
-    if (nextErrors.dueDate) {
-      const el = document.getElementById(dueDateId);
-      el?.focus?.();
+    if (nextErrors?.dueDate) {
+      dueDateInputRef.current?.focus?.();
+      return;
     }
   }
 
   const change = (field) => (e) => {
     const value = e.target.value;
-    const next = { ...form, [field]: value };
 
     if (field === 'status') {
+      const nextStatus = value;
+
       if (editingId) {
         const currentTask = tasks.find((t) => t.id === editingId);
         const previousStatus = currentTask?.status ?? form.status;
-        if (previousStatus === 'Done' && value === 'In Progress') {
-          setPendingStatusChange({ previousStatus, nextStatus: value });
+
+        const needsConfirm =
+          shouldConfirmDoneToInProgress?.(previousStatus, nextStatus) ??
+          (previousStatus === 'Done' && nextStatus === 'In Progress');
+
+        if (needsConfirm) {
+          setPendingStatusChange({ previousStatus, nextStatus });
           setConfirm({
             open: true,
             title: 'Move task back to In Progress?',
@@ -165,7 +139,9 @@ export default function App() {
       }
     }
 
+    const next = { ...form, [field]: value };
     setForm(next);
+
     if (field === 'title' || field === 'dueDate') {
       setTouched((t) => ({ ...t, [field]: true }));
       validate(next);
@@ -187,11 +163,8 @@ export default function App() {
   function submit(e) {
     e.preventDefault();
 
-    const nextErrors = validate({
-      ...form,
-      title: (form.title ?? '').trim(),
-    });
-
+    const trimmed = { ...form, title: (form.title ?? '').trim() };
+    const nextErrors = validate(trimmed);
     setTouched({ title: true, dueDate: true });
 
     if (nextErrors.title || nextErrors.dueDate) {
@@ -199,51 +172,56 @@ export default function App() {
       return;
     }
 
-    const now = Date.now();
-    const title = form.title.trim();
-    const payload = {
-      title,
-      description: form.description ?? '',
-      status: form.status,
-      priority: form.priority,
-      dueDate: form.dueDate ?? '',
-      updatedAt: now,
-    };
-
-    setTasks((prev) => {
-      if (editingId) {
-        return prev.map((t) => (t.id === editingId ? { ...t, ...payload } : t));
+    if (editingId) {
+      const updated = updateTask?.(tasks, editingId, trimmed) ?? null;
+      if (Array.isArray(updated)) {
+        applyAndPersistTasks(updated);
+      } else {
+        applyAndPersistTasks((prev) => prev.map((t) => (t.id === editingId ? { ...t, ...trimmed } : t)));
       }
-      const newTask = {
-        id: now,
-        ...payload,
-        createdAt: now,
-      };
-      return [newTask, ...prev];
-    });
+    } else {
+      const created = createTask?.(trimmed) ?? null;
+      if (created) {
+        applyAndPersistTasks((prev) => [created, ...prev]);
+      } else {
+        const now = Date.now();
+        applyAndPersistTasks((prev) => [
+          {
+            id: now,
+            ...trimmed,
+            createdAt: now,
+            updatedAt: now,
+          },
+          ...prev,
+        ]);
+      }
+    }
 
     reset();
     titleInputRef.current?.focus();
   }
 
   function edit(task) {
-    const normalized = normalizeStoredTask(task);
+    if (!task) return;
+
     setForm({
-      title: normalized.title,
-      description: normalized.description,
-      status: normalized.status,
-      priority: normalized.priority,
-      dueDate: normalized.dueDate,
+      title: typeof task.title === 'string' ? task.title : '',
+      description: typeof task.description === 'string' ? task.description : '',
+      status: STATUSES.includes(task.status) ? task.status : 'To Do',
+      priority: PRIORITIES.includes(task.priority) ? task.priority : 'Medium',
+      dueDate: typeof task.dueDate === 'string' ? task.dueDate : '',
     });
-    setEditingId(normalized.id);
+
+    setEditingId(task.id ?? null);
     setTouched({ title: false, dueDate: false });
     setErrors({ title: '', dueDate: '' });
 
-    // focus title for editing
     requestAnimationFrame(() => titleInputRef.current?.focus());
   }
 
   function requestDelete(task) {
+    if (!task) return;
+
     setPendingDelete(task);
     setConfirm({
       open: true,
@@ -253,7 +231,8 @@ export default function App() {
       cancelLabel: 'Cancel',
       onConfirm: () => {
         const toDelete = task;
-        setTasks((prev) => prev.filter((t) => t.id !== toDelete.id));
+
+        applyAndPersistTasks((prev) => prev.filter((t) => t.id !== toDelete.id));
         if (editingId === toDelete.id) reset();
 
         setToast({
@@ -262,7 +241,7 @@ export default function App() {
           actionLabel: 'Undo',
           durationMs: 6000,
           onAction: () => {
-            setTasks((prev) => [normalizeStoredTask(toDelete), ...prev]);
+            applyAndPersistTasks((prev) => [toDelete, ...prev]);
             setToast((t) => ({ ...t, open: false }));
           },
         });
@@ -274,7 +253,6 @@ export default function App() {
   }
 
   function closeConfirm() {
-    // If we had a pending status change and user canceled, revert select UI by resetting form.status to previous
     if (pendingStatusChange) {
       setForm((prev) => ({ ...prev, status: pendingStatusChange.previousStatus }));
       setPendingStatusChange(null);
@@ -284,43 +262,9 @@ export default function App() {
   }
 
   const visibleTasks = useMemo(() => {
-    let list = tasks;
-
-    const q = search.trim();
-    if (q) {
-      list = list.filter((t) => {
-        const hay = `${t.title ?? ''}\n${t.description ?? ''}`.trim();
-        return containsInsensitive(hay, q);
-      });
-    }
-
-    if (filterStatus !== 'All') {
-      list = list.filter((t) => t.status === filterStatus);
-    }
-    if (filterPriority !== 'All') {
-      list = list.filter((t) => t.priority === filterPriority);
-    }
-
-    const dir = sortDir === 'asc' ? 1 : -1;
-    const sorted = [...list].sort((a, b) => {
-      switch (sortBy) {
-        case 'title':
-          return compare((a.title ?? '').toLowerCase(), (b.title ?? '').toLowerCase()) * dir;
-        case 'status':
-          return compare(STATUSES.indexOf(a.status), STATUSES.indexOf(b.status)) * dir;
-        case 'priority':
-          return compare(PRIORITY_RANK[a.priority] ?? 0, PRIORITY_RANK[b.priority] ?? 0) * dir;
-        case 'dueDate':
-          return compare(getDueDateTimestamp(a.dueDate), getDueDateTimestamp(b.dueDate)) * dir;
-        case 'createdAt':
-          return compare(a.createdAt ?? 0, b.createdAt ?? 0) * dir;
-        case 'updatedAt':
-        default:
-          return compare(a.updatedAt ?? 0, b.updatedAt ?? 0) * dir;
-      }
-    });
-
-    return sorted;
+    const params = { search, filterStatus, filterPriority, sortBy, sortDir };
+    const selected = selectVisibleTasks?.(tasks, params);
+    return Array.isArray(selected) ? selected : tasks;
   }, [tasks, search, filterStatus, filterPriority, sortBy, sortDir]);
 
   const showTitleError = touched.title && !!errors.title;
@@ -335,7 +279,6 @@ export default function App() {
           <label>
             Search
             <input
-              ref={searchInputRef}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search title/description"
@@ -436,6 +379,7 @@ export default function App() {
         <label htmlFor={dueDateId}>Due date</label>
         <input
           id={dueDateId}
+          ref={dueDateInputRef}
           type="date"
           value={form.dueDate}
           onChange={change('dueDate')}
@@ -473,8 +417,12 @@ export default function App() {
               {task.description && <p>{task.description}</p>}
             </div>
             <div>
-              <button onClick={() => edit(task)}>Edit</button>
-              <button onClick={() => requestDelete(task)}>Delete</button>
+              <button type="button" onClick={() => edit(task)}>
+                Edit
+              </button>
+              <button type="button" onClick={() => requestDelete(task)}>
+                Delete
+              </button>
             </div>
           </li>
         ))}
