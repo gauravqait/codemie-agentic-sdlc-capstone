@@ -1,103 +1,108 @@
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
+import { tasksRepository } from './data/tasksRepository.js';
+import { getVisibleTasks } from './domain/selectors/tasks.js';
+import { TASK_STATUS, SORT_OPTIONS } from './domain/constants.js';
+import { TaskForm } from './components/TaskForm.jsx';
+import { TaskList } from './components/TaskList.jsx';
+import { TaskControls } from './components/TaskControls.jsx';
+import { LiveRegion } from './components/LiveRegion.jsx';
 
-const STATUSES = ['To Do', 'In Progress', 'Done'];
-const EMPTY = { title: '', description: '', status: 'To Do' };
+const EMPTY_FORM = { title: '', description: '', status: TASK_STATUS.TODO };
+const INITIAL_FILTERS = { status: 'All', query: '', sort: SORT_OPTIONS.NEWEST };
 
 export default function App() {
-  const [tasks, setTasks] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('tasks')) ?? [];
-    } catch {
-      return [];
-    }
-  });
-  const [form, setForm] = useState(EMPTY);
+  const [tasks, setTasks] = useState([]);
+  const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState(null);
-  const [error, setError] = useState('');
+  const [filters, setFilters] = useState(INITIAL_FILTERS);
+  const [liveMessage, setLiveMessage] = useState('');
 
+  // Load tasks on mount
   useEffect(() => {
-    localStorage.setItem('tasks', JSON.stringify(tasks));
-  }, [tasks]);
+    const loadedTasks = tasksRepository.getAll();
+    setTasks(loadedTasks);
+  }, []);
 
-  const change = (field) => (e) => setForm({ ...form, [field]: e.target.value });
+  // Get visible tasks after applying filters
+  const visibleTasks = getVisibleTasks(tasks, filters);
 
-  function submit(e) {
-    e.preventDefault();
-    const title = form.title.trim();
-    if (!title) return setError('Title is required.');
-    const task = { ...form, title };
-    setTasks(
-      editingId
-        ? tasks.map((t) => (t.id === editingId ? { ...t, ...task } : t))
-        : [{ ...task, id: Date.now() }, ...tasks],
-    );
-    reset();
-  }
+  const handleFormChange = (newForm) => {
+    setForm(newForm);
+  };
 
-  function reset() {
-    setForm(EMPTY);
-    setEditingId(null);
-    setError('');
-  }
+  const handleSubmit = () => {
+    if (editingId) {
+      // Update existing task
+      const updated = tasksRepository.update(editingId, form);
+      if (updated) {
+        setTasks(tasks.map((t) => (t.id === editingId ? updated : t)));
+        setLiveMessage(`Task "${updated.title}" updated.`);
+      }
+    } else {
+      // Create new task
+      const created = tasksRepository.create(form);
+      setTasks([created, ...tasks]);
+      setLiveMessage(`Task "${created.title}" created.`);
+    }
+    resetForm();
+  };
 
-  function edit(task) {
-    setForm(task);
+  const handleCancel = () => {
+    resetForm();
+    setLiveMessage('Edit cancelled.');
+  };
+
+  const handleEdit = (task) => {
+    setForm({
+      title: task.title,
+      description: task.description,
+      status: task.status,
+    });
     setEditingId(task.id);
-  }
+    setLiveMessage(`Editing task "${task.title}".`);
+  };
 
-  function remove(task) {
-    if (!window.confirm(`Delete "${task.title}"?`)) return;
-    setTasks(tasks.filter((t) => t.id !== task.id));
-    if (editingId === task.id) reset();
-  }
+  const handleDelete = (task) => {
+    if (!window.confirm(`Delete task "${task.title}"?`)) return;
+
+    const success = tasksRepository.remove(task.id);
+    if (success) {
+      setTasks(tasks.filter((t) => t.id !== task.id));
+      if (editingId === task.id) resetForm();
+      setLiveMessage(`Task "${task.title}" deleted.`);
+    }
+  };
+
+  const resetForm = () => {
+    setForm(EMPTY_FORM);
+    setEditingId(null);
+  };
 
   return (
-    <main>
-      <h1>Task Manager</h1>
+    <main className="app">
+      <header>
+        <h1>Task Manager</h1>
+        <p className="subtitle">Enhanced with filtering, search, and accessibility</p>
+      </header>
 
-      <form onSubmit={submit} aria-label="Task form">
-        <label>
-          Title
-          <input value={form.title} onChange={change('title')} />
-        </label>
-        {error && <p role="alert">{error}</p>}
-        <label>
-          Description
-          <textarea value={form.description} onChange={change('description')} />
-        </label>
-        <label>
-          Status
-          <select value={form.status} onChange={change('status')}>
-            {STATUSES.map((s) => (
-              <option key={s}>{s}</option>
-            ))}
-          </select>
-        </label>
-        <div>
-          <button type="submit">{editingId ? 'Save' : 'Add'}</button>
-          {editingId && (
-            <button type="button" onClick={reset}>
-              Cancel
-            </button>
-          )}
-        </div>
-      </form>
+      <section aria-labelledby="form-heading">
+        <h2 id="form-heading">{editingId ? 'Edit Task' : 'Create New Task'}</h2>
+        <TaskForm
+          form={form}
+          onFormChange={handleFormChange}
+          onSubmit={handleSubmit}
+          onCancel={handleCancel}
+          isEditing={!!editingId}
+        />
+      </section>
 
-      {tasks.length === 0 && <p>No tasks yet.</p>}
-      <ul>
-        {tasks.map((task) => (
-          <li key={task.id}>
-            <div>
-              <strong>{task.title}</strong> <small>({task.status})</small>
-              {task.description && <p>{task.description}</p>}
-            </div>
-            <div>
-              <button onClick={() => edit(task)}>Edit</button>
-              <button onClick={() => remove(task)}>Delete</button>
-            </div>
-          </li>
-        ))}
-      </ul>
+      <section aria-labelledby="list-heading">
+        <h2 id="list-heading">Tasks ({visibleTasks.length})</h2>
+        <TaskControls filters={filters} onFiltersChange={setFilters} />
+        <TaskList tasks={visibleTasks} onEdit={handleEdit} onDelete={handleDelete} />
+      </section>
+
+      <LiveRegion message={liveMessage} />
     </main>
   );
 }

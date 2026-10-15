@@ -1,0 +1,67 @@
+{
+  "version": 2,
+  "activeProfile": "default",
+  "profiles": {},
+  "codemieAssistants": [
+    {
+      "id": "f9a0fcbf-b00d-4c8c-9c28-cb2f21cf6712",
+      "name": "Documentation Assistant",
+      "slug": "documentation-assistant",
+      "description": "Creates and maintains project documentation and Confluence content.",
+      "project": "gaurav_agarwal@epam.com",
+      "registeredAt": "2026-10-15T06:45:57.577Z",
+      "registrationMode": "agent",
+      "agentTargets": [
+        "claude"
+      ]
+    },
+    {
+      "id": "ba73ea22-aad0-41dd-8d79-b5e835104873",
+      "name": "Code Review Assistant",
+      "slug": "code-review-assistant",
+      "description": "Reviews code changes and identifies quality, security and maintainability issues.",
+      "project": "gaurav_agarwal@epam.com",
+      "registeredAt": "2026-10-15T06:54:12.790Z",
+      "registrationMode": "agent",
+      "agentTargets": [
+        "claude"
+      ]
+    },
+    {
+      "id": "34d478f4-69ea-492c-a0be-b96d9a022cd3",
+      "name": "Test Assistant",
+      "slug": "test-assistant",
+      "description": "Generates test scenarios, test cases and test automation assets.",
+      "project": "gaurav_agarwal@epam.com",
+      "registeredAt": "2026-10-15T06:54:44.039Z",
+      "registrationMode": "agent",
+      "agentTargets": [
+        "claude"
+      ]
+    },
+    {
+      "id": "b5350226-3ce6-4518-bd63-e7c435223232",
+      "name": "Development Assistant",
+      "slug": "development-assistant",
+      "description": "Generates code, implementation updates and development artifacts.",
+      "project": "gaurav_agarwal@epam.com",
+      "registeredAt": "2026-10-15T06:56:42.065Z",
+      "registrationMode": "agent",
+      "agentTargets": [
+        "claude"
+      ]
+    },
+    {
+      "id": "414431ee-1ee4-46bd-8af7-9d38563dfcc3",
+      "name": "Deployment Assistant",
+      "slug": "deployment-assistant",
+      "description": "Manages build, deployment and deployment validation activities.",
+      "project": "gaurav_agarwal@epam.com",
+      "registeredAt": "2026-10-15T07:08:59.727Z",
+      "registrationMode": "agent",
+      "agentTargets": [
+        "claude"
+      ]
+    }
+  ]
+}
