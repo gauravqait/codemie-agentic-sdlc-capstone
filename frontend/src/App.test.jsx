@@ -15,13 +15,19 @@ async function addTask(user, title) {
   await user.click(screen.getByRole('button', { name: /add/i }));
 }
 
-async function editFirstTask(user, newTitle) {
+async function editFirstTask(user, newTitle, newStatus) {
   const list = screen.getByRole('list', { name: /tasks/i });
   const firstItem = within(list).getAllByRole('listitem')[0];
 
   await user.click(within(firstItem).getByRole('button', { name: /edit/i }));
   await user.clear(screen.getByRole('textbox', { name: /title/i }));
   await user.type(screen.getByRole('textbox', { name: /title/i }), newTitle);
+
+  if (newStatus) {
+    const statusSelect = screen.getByRole('combobox', { name: /status/i });
+    await user.selectOptions(statusSelect, newStatus);
+  }
+
   await user.click(within(firstItem).getByRole('button', { name: /save/i }));
 }
 
@@ -66,23 +72,12 @@ it('rejects an empty title and focuses the title field (field-level validation +
 
   await addTask(user, '');
 
-  // Field-level error (commonly rendered via aria-invalid/aria-describedby)
   const titleInput = screen.getByRole('textbox', { name: /title/i });
   expect(titleInput).toHaveFocus();
 
-  // Live region announcement (new UI uses a live region, not alert)
-  // Accept common patterns: role="status" or aria-live region exposed via role.
-  const liveRegion =
-    screen.queryByRole('status') ??
-    screen.queryByRole('log') ??
-    screen.queryByRole('alert');
-
-  if (liveRegion) {
-    expect(liveRegion).toHaveTextContent(/title is required/i);
-  } else {
-    // Fallback: ensure error text exists somewhere in the document
-    expect(screen.getByText(/title is required/i)).toBeInTheDocument();
-  }
+  // Implemented UI uses a live region for validation messaging.
+  const liveRegion = screen.getByRole('status');
+  expect(liveRegion).toHaveTextContent('Title is required.');
 });
 
 it('edits a task and updates the title', async () => {
@@ -111,11 +106,12 @@ it('filter, search, and sort behave', async () => {
   const user = userEvent.setup();
   renderApp();
 
+  // Add out-of-order titles so sorting can be asserted.
+  await addTask(user, 'Charlie');
   await addTask(user, 'Alpha');
   await addTask(user, 'Bravo');
-  await addTask(user, 'Charlie');
 
-  // Search
+  // Search (implemented as role="searchbox")
   const searchBox = screen.getByRole('searchbox', { name: /search/i });
   await user.type(searchBox, 'br');
 
@@ -126,38 +122,41 @@ it('filter, search, and sort behave', async () => {
   // Clear search
   await user.clear(searchBox);
 
-  // Filter (accept common implementations: combobox or buttons)
-  const filterControl =
-    screen.queryByRole('combobox', { name: /filter/i }) ??
-    screen.queryByRole('group', { name: /filter/i });
+  // Set first task status to Done via edit
+  await editFirstTask(user, 'Charlie', 'Done');
 
-  if (filterControl?.getAttribute('role') === 'combobox') {
-    await user.selectOptions(filterControl, ['completed']);
-  } else {
-    // try clicking "Completed" filter button/tab
-    const completedButton = screen.queryByRole('button', { name: /completed/i });
-    if (completedButton) await user.click(completedButton);
-  }
+  // Filter (implemented as select with aria-label "Filter status")
+  const filterSelect = screen.getByRole('combobox', { name: 'Filter status' });
+  await user.selectOptions(filterSelect, 'Done');
 
-  // If UI supports completing a task, mark one as completed then ensure filter reduces list.
-  // We only assert that a filter control exists and can be used without crashing; and that tasks remain visible after clearing.
-  const allButton = screen.queryByRole('button', { name: /^all$/i });
-  if (allButton) {
-    await user.click(allButton);
-    expect(screen.getByText('Alpha')).toBeInTheDocument();
-    expect(screen.getByText('Bravo')).toBeInTheDocument();
-    expect(screen.getByText('Charlie')).toBeInTheDocument();
-  }
+  // Only the Done task should be visible
+  expect(screen.getByText('Charlie')).toBeInTheDocument();
+  expect(screen.queryByText('Alpha')).not.toBeInTheDocument();
+  expect(screen.queryByText('Bravo')).not.toBeInTheDocument();
 
-  // Sort (accept common implementations: combobox)
-  const sortSelect = screen.queryByRole('combobox', { name: /sort/i });
-  if (sortSelect) {
-    // Choose a deterministic option name if present
-    const options = within(sortSelect).queryAllByRole('option');
-    if (options.length > 1) {
-      await user.selectOptions(sortSelect, options[options.length - 1].getAttribute('value') ?? options[options.length - 1].textContent);
-    }
-  }
+  // Reset filter to show all (uses one of the implemented statuses; choose "To Do")
+  await user.selectOptions(filterSelect, 'To Do');
+  expect(screen.getByText('Alpha')).toBeInTheDocument();
+  expect(screen.getByText('Bravo')).toBeInTheDocument();
+
+  // Sort (implemented as select with aria-label "Sort tasks")
+  const sortSelect = screen.getByRole('combobox', { name: 'Sort tasks' });
+  await user.selectOptions(sortSelect, 'Title (A–Z)');
+
+  const list = screen.getByRole('list', { name: /tasks/i });
+  const titles = within(list)
+    .getAllByRole('listitem')
+    .map((li) => li.textContent);
+
+  const alphaIndex = titles.findIndex((t) => t?.includes('Alpha'));
+  const bravoIndex = titles.findIndex((t) => t?.includes('Bravo'));
+  const charlieIndex = titles.findIndex((t) => t?.includes('Charlie'));
+
+  expect(alphaIndex).toBeGreaterThanOrEqual(0);
+  expect(bravoIndex).toBeGreaterThanOrEqual(0);
+  expect(charlieIndex).toBeGreaterThanOrEqual(0);
+  expect(alphaIndex).toBeLessThan(bravoIndex);
+  expect(bravoIndex).toBeLessThan(charlieIndex);
 });
 
 it('import/export basic works', async () => {
@@ -166,48 +165,17 @@ it('import/export basic works', async () => {
 
   await addTask(user, 'Export me');
 
-  // Export: accept button or link
-  const exportButton =
-    screen.queryByRole('button', { name: /export/i }) ??
-    screen.queryByRole('link', { name: /export/i });
+  const exportButton = screen.getByRole('button', { name: 'Export JSON' });
+  await user.click(exportButton);
 
-  if (exportButton) {
-    await user.click(exportButton);
-  }
+  const importTextarea = screen.getByRole('textbox', { name: 'JSON' });
+  await user.clear(importTextarea);
+  await user.paste(
+    JSON.stringify([{ id: '1', title: 'Imported task', status: 'To Do' }])
+  );
 
-  // Import: accept file input or textarea-based import
-  const importButton = screen.queryByRole('button', { name: /import/i });
-  if (importButton) {
-    await user.click(importButton);
-  }
+  const importButton = screen.getByRole('button', { name: 'Import JSON' });
+  await user.click(importButton);
 
-  const fileInput = screen.queryByRole('textbox', { name: /import/i }) ?? screen.queryByLabelText(/import/i, { selector: 'input[type="file"]' });
-
-  if (fileInput && fileInput.tagName?.toLowerCase() === 'input' && fileInput.type === 'file') {
-    const file = new File([JSON.stringify([{ id: '1', title: 'Imported task' }])], 'tasks.json', {
-      type: 'application/json',
-    });
-    await user.upload(fileInput, file);
-  } else {
-    const importText =
-      screen.queryByRole('textbox', { name: /import/i }) ??
-      screen.queryByRole('textbox', { name: /json/i });
-
-    if (importText) {
-      await user.clear(importText);
-      await user.type(
-        importText,
-        JSON.stringify([{ id: '1', title: 'Imported task' }])
-      );
-      const confirmImport =
-        screen.queryByRole('button', { name: /confirm import/i }) ??
-        screen.queryByRole('button', { name: /^import$/i });
-      if (confirmImport) await user.click(confirmImport);
-    }
-  }
-
-  // Basic assertion: imported task appears OR export/import UI exists without throwing
-  expect(
-    screen.queryByText('Imported task') ?? screen.getByText('Export me')
-  ).toBeInTheDocument();
+  expect(screen.getByText('Imported task')).toBeInTheDocument();
 });
