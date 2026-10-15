@@ -3,7 +3,7 @@ import { STATUSES } from '../utils/taskModel.js';
 export default function Toolbar({ q, status, sort, onChange }) {
   return (
     <section aria-label="Task controls" style={{ marginBottom: 12 }}>
-      <label>
+      <label style={{ display: 'block', marginBottom: 8 }}>
         Search
         <input
           value={q}
@@ -12,7 +12,7 @@ export default function Toolbar({ q, status, sort, onChange }) {
         />
       </label>
 
-      <label>
+      <label style={{ display: 'block', marginBottom: 8 }}>
         Filter by status
         <select value={status} onChange={(e) => onChange({ status: e.target.value })}>
           <option value="All">All</option>
@@ -24,7 +24,7 @@ export default function Toolbar({ q, status, sort, onChange }) {
         </select>
       </label>
 
-      <label>
+      <label style={{ display: 'block' }}>
         Sort
         <select value={sort} onChange={(e) => onChange({ sort: e.target.value })}>
           <option value="newest">Newest</option>
