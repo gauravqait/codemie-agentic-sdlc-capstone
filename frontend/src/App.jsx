@@ -2,18 +2,19 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { TASK_STATUS_VALUES } from './utils/constants';
 import { loadTasks, saveTasks } from './services/storage';
+import { validateTaskDraft } from './utils/validation';
 import { createTask, updateTask } from './utils/taskModel';
 import { selectVisibleTasks } from './utils/taskSelectors';
-import { validateTaskDraft } from './utils/validation';
 
 const EMPTY_DRAFT = {
   title: '',
   description: '',
-  status: 'To Do',
+  status: TASK_STATUS_VALUES[0],
 };
 
 export default function App() {
   const [tasks, setTasks] = useState(() => loadTasks());
+
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [editingId, setEditingId] = useState(null);
 
@@ -38,6 +39,7 @@ export default function App() {
   const change = (field) => (e) => {
     const value = e.target.value;
     setDraft((prev) => ({ ...prev, [field]: value }));
+
     setErrors((prev) => {
       if (!prev?.[field]) return prev;
       const next = { ...prev };
@@ -220,8 +222,12 @@ export default function App() {
                 {task.description && <p>{task.description}</p>}
               </div>
               <div>
-                <button onClick={() => edit(task)}>Edit</button>
-                <button onClick={() => remove(task)}>Delete</button>
+                <button type="button" onClick={() => edit(task)}>
+                  Edit
+                </button>
+                <button type="button" onClick={() => remove(task)}>
+                  Delete
+                </button>
               </div>
             </li>
           ))}
