@@ -68,23 +68,18 @@ it('adds a task', async () => {
   renderApp();
 
   expect(
-    screen.getByRole('heading', { name: /tasks/i, level: 1 })
+    screen.getByRole('heading', { name: /task manager/i, level: 1 })
   ).toBeInTheDocument();
 
   await addTask(user, 'Buy milk');
   expect(screen.getByText('Buy milk')).toBeInTheDocument();
 
-  // ids are strings in the new UI; ensure listitem exposes a string id attribute if present
-  const list = screen.getByRole('list', { name: /tasks/i });
+  const list = screen.getByRole('list', { name: 'Tasks' });
   const item = within(list).getAllByRole('listitem')[0];
-  const dataId =
-    item.getAttribute('data-id') ??
-    item.getAttribute('data-testid') ??
-    item.getAttribute('id');
 
-  if (dataId != null) {
-    expect(typeof dataId).toBe('string');
-  }
+  const dataId = item.getAttribute('data-id');
+  expect(dataId).toBeTruthy();
+  expect(typeof dataId).toBe('string');
 });
 
 it('rejects an empty title and focuses the title field (field-level validation + live region)', async () => {
