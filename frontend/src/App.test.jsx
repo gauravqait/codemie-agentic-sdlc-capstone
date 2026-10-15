@@ -12,6 +12,11 @@ function getFilterStatusControl() {
   return screen.getAllByLabelText('Status')[1];
 }
 
+function getFormStatusControl() {
+  // Status exists in both the form and filters; form is the first instance.
+  return screen.getAllByLabelText('Status')[0];
+}
+
 async function add(user, { title, description, status } = {}) {
   if (title != null) {
     await user.clear(screen.getByLabelText('Title'));
@@ -22,7 +27,7 @@ async function add(user, { title, description, status } = {}) {
     await user.type(screen.getByLabelText('Description'), description);
   }
   if (status != null) {
-    await user.selectOptions(screen.getAllByLabelText('Status')[0], status);
+    await user.selectOptions(getFormStatusControl(), status);
   }
   await user.click(screen.getByRole('button', { name: 'Add' }));
 }
@@ -89,7 +94,7 @@ it('filters by status (task filters section)', async () => {
   const user = userEvent.setup();
   render(<App />);
 
-  await add(user, { title: 'Task A', description: 'alpha', status: 'Open' });
+  await add(user, { title: 'Task A', description: 'alpha', status: 'To Do' });
   await add(user, { title: 'Task B', description: 'beta', status: 'Done' });
 
   const filters = within(getFilterSection());
@@ -106,8 +111,8 @@ it('filters by search query (matches description)', async () => {
   const user = userEvent.setup();
   render(<App />);
 
-  await add(user, { title: 'One', description: 'contains zebra', status: 'Open' });
-  await add(user, { title: 'Two', description: 'contains lion', status: 'Open' });
+  await add(user, { title: 'One', description: 'contains zebra', status: 'To Do' });
+  await add(user, { title: 'Two', description: 'contains lion', status: 'To Do' });
 
   const filters = within(getFilterSection());
   await user.type(filters.getByLabelText('Search'), 'zebra');
