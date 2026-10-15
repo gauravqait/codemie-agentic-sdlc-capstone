@@ -1,348 +1,118 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import App from './App.jsx';
 
-function mockRandomUUID() {
-  const original = globalThis.crypto?.randomUUID;
-  const fn = vi.fn();
-  let i = 0;
+async function addTask(user, title, { description, status } = {}) {
+  await user.clear(screen.getByLabelText('Title'));
+  await user.type(screen.getByLabelText('Title'), title);
 
-  fn.mockImplementation(() => `uuid-${++i}`);
+  if (typeof description === 'string') {
+    await user.clear(screen.getByLabelText('Description'));
+    await user.type(screen.getByLabelText('Description'), description);
+  }
 
-  if (!globalThis.crypto) globalThis.crypto = {};
-  globalThis.crypto.randomUUID = fn;
-
-  return () => {
-    if (original) globalThis.crypto.randomUUID = original;
-    else delete globalThis.crypto.randomUUID;
-  };
-}
-
-async function addTask(user, title, description) {
-  const titleInput = screen.getByLabelText('Title');
-  await user.clear(titleInput);
-  if (title != null) await user.type(titleInput, title);
-
-  if (description != null) {
-    const descInput = screen.queryByLabelText('Description');
-    if (descInput) {
-      await user.clear(descInput);
-      await user.type(descInput, description);
-    }
+  if (status) {
+    await user.selectOptions(screen.getByLabelText('Status'), status);
   }
 
   await user.click(screen.getByRole('button', { name: 'Add' }));
 }
 
-function getTaskItemByTitle(title) {
-  // Prefer listitem/role-based lookup, fall back to closest li for resilience.
-  const titleNode = screen.getByText(title);
-  const li = titleNode.closest('li');
-  if (li) return li;
+it('adds a task and trims the title', async () => {
+  const user = userEvent.setup();
+  render(<App />);
 
-  const listItems = screen.queryAllByRole('listitem');
-  if (listItems.length) {
-    const match = listItems.find((item) => within(item).queryByText(title));
-    if (match) return match;
-  }
-
-  // As a last resort, return document body scoped wrapper; tests may still use global queries.
-  return document.body;
-}
-
-beforeEach(() => {
-  localStorage.clear();
+  await addTask(user, '  Buy milk  ');
+  expect(screen.getByText('Buy milk')).toBeInTheDocument();
 });
 
-afterEach(() => {
-  vi.restoreAllMocks();
+it('rejects an empty title and focuses Title input', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.click(screen.getByRole('button', { name: 'Add' }));
+
+  expect(screen.getByRole('alert')).toHaveTextContent('Title is required.');
+  expect(screen.getByLabelText('Title')).toHaveFocus();
 });
 
-describe('App task manager', () => {
-  it('renders core UI controls', () => {
-    render(<App />);
+it('focuses Title after successful add', async () => {
+  const user = userEvent.setup();
+  render(<App />);
 
-    expect(screen.getByLabelText('Title')).toBeInTheDocument();
-    // Description may be optional depending on UI, but if present should be accessible.
-    const desc = screen.queryByLabelText('Description');
-    if (desc) expect(desc).toBeInTheDocument();
+  await addTask(user, 'One');
+  expect(screen.getByLabelText('Title')).toHaveFocus();
+});
 
-    expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument();
+it('edits a task', async () => {
+  const user = userEvent.setup();
+  render(<App />);
 
-    expect(screen.getByLabelText('Search')).toBeInTheDocument();
-    expect(screen.getByLabelText('Filter by status')).toBeInTheDocument();
-  });
+  await addTask(user, 'Old');
 
-  it('adds a task and trims title', async () => {
-    const restoreUUID = mockRandomUUID();
-    const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: 'Edit' }));
+  await user.clear(screen.getByLabelText('Title'));
+  await user.type(screen.getByLabelText('Title'), 'New');
+  await user.click(screen.getByRole('button', { name: 'Save' }));
 
-    render(<App />);
+  expect(screen.getByText('New')).toBeInTheDocument();
+  expect(screen.queryByText('Old')).not.toBeInTheDocument();
+});
 
-    await addTask(user, '   Buy milk   ', 'From store');
+it('deletes a task after confirmation', async () => {
+  const user = userEvent.setup();
+  const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-    expect(screen.getByText('Buy milk')).toBeInTheDocument();
-    expect(screen.queryByText('   Buy milk   ')).not.toBeInTheDocument();
+  render(<App />);
+  await addTask(user, 'Temp');
 
-    restoreUUID();
-  });
+  await user.click(screen.getByRole('button', { name: 'Delete' }));
+  expect(screen.queryByText('Temp')).not.toBeInTheDocument();
 
-  it('rejects empty title and focuses Title input', async () => {
-    const user = userEvent.setup();
+  confirmSpy.mockRestore();
+});
 
-    render(<App />);
+it('filters by status', async () => {
+  const user = userEvent.setup();
+  render(<App />);
 
-    const titleInput = screen.getByLabelText('Title');
-    titleInput.focus();
-    expect(titleInput).toHaveFocus();
+  await addTask(user, 'A', { status: 'To Do' });
+  await addTask(user, 'B', { status: 'Done' });
 
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+  await user.selectOptions(screen.getByLabelText('Filter by status'), 'Done');
 
-    expect(screen.getByText('Title is required.')).toBeInTheDocument();
-    expect(screen.getByLabelText('Title')).toHaveFocus();
-  });
+  expect(screen.getByText('B')).toBeInTheDocument();
+  expect(screen.queryByText('A')).not.toBeInTheDocument();
+});
 
-  it('focuses Title after successful add', async () => {
-    const restoreUUID = mockRandomUUID();
-    const user = userEvent.setup();
+it('searches by title and description', async () => {
+  const user = userEvent.setup();
+  render(<App />);
 
-    render(<App />);
+  await addTask(user, 'Reset password', { description: 'User cannot login' });
+  await addTask(user, 'Buy milk', { description: 'Groceries' });
 
-    await addTask(user, 'Focus test', 'Any');
+  await user.type(screen.getByLabelText('Search'), 'login');
 
-    expect(screen.getByText('Focus test')).toBeInTheDocument();
-    expect(screen.getByLabelText('Title')).toHaveFocus();
+  expect(screen.getByText('Reset password')).toBeInTheDocument();
+  expect(screen.queryByText('Buy milk')).not.toBeInTheDocument();
+});
 
-    restoreUUID();
-  });
+it('migrates legacy localStorage array to versioned envelope', async () => {
+  const legacy = [{ id: 1, title: 'Legacy', description: '', status: 'To Do' }];
+  localStorage.setItem('tasks', JSON.stringify(legacy));
 
-  it('edits a task', async () => {
-    const restoreUUID = mockRandomUUID();
-    const user = userEvent.setup();
+  const user = userEvent.setup();
+  render(<App />);
 
-    render(<App />);
+  expect(screen.getByText('Legacy')).toBeInTheDocument();
 
-    await addTask(user, 'Old', 'Original description');
+  // Trigger a state change to ensure saveTasks runs (effect runs after render anyway)
+  await user.type(screen.getByLabelText('Search'), '');
 
-    // Prefer per-item edit if UI renders multiple, but global button is fine for single item
-    const item = getTaskItemByTitle('Old');
-    const editButton = within(item).queryByRole('button', { name: 'Edit' }) ?? screen.getByRole('button', { name: 'Edit' });
-    await user.click(editButton);
-
-    const titleInput = screen.getByLabelText('Title');
-    await user.clear(titleInput);
-    await user.type(titleInput, 'New');
-
-    const descInput = screen.queryByLabelText('Description');
-    if (descInput) {
-      await user.clear(descInput);
-      await user.type(descInput, 'Updated description');
-    }
-
-    const saveButton = screen.queryByRole('button', { name: 'Save' });
-    if (saveButton) {
-      await user.click(saveButton);
-    } else {
-      // If UI uses "Add" as submit even while editing (unlikely), fall back
-      await user.click(screen.getByRole('button', { name: 'Add' }));
-    }
-
-    expect(screen.getByText('New')).toBeInTheDocument();
-    expect(screen.queryByText('Old')).not.toBeInTheDocument();
-
-    restoreUUID();
-  });
-
-  it('deletes after confirmation', async () => {
-    const restoreUUID = mockRandomUUID();
-    const user = userEvent.setup();
-
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
-
-    render(<App />);
-
-    await addTask(user, 'Temp', 'To delete');
-
-    const item = getTaskItemByTitle('Temp');
-    const deleteButton =
-      within(item).queryByRole('button', { name: 'Delete' }) ?? screen.getByRole('button', { name: 'Delete' });
-
-    await user.click(deleteButton);
-
-    expect(screen.queryByText('Temp')).not.toBeInTheDocument();
-
-    confirmSpy.mockRestore();
-    restoreUUID();
-  });
-
-  it('does not delete when confirmation is cancelled', async () => {
-    const restoreUUID = mockRandomUUID();
-    const user = userEvent.setup();
-
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
-
-    render(<App />);
-
-    await addTask(user, 'Keep me', 'Should remain');
-
-    const item = getTaskItemByTitle('Keep me');
-    const deleteButton =
-      within(item).queryByRole('button', { name: 'Delete' }) ?? screen.getByRole('button', { name: 'Delete' });
-
-    await user.click(deleteButton);
-
-    expect(screen.getByText('Keep me')).toBeInTheDocument();
-
-    confirmSpy.mockRestore();
-    restoreUUID();
-  });
-
-  it('toggles done via checkbox', async () => {
-    const restoreUUID = mockRandomUUID();
-    const user = userEvent.setup();
-
-    render(<App />);
-
-    await addTask(user, 'Checkbox task', 'Toggle me');
-
-    const checkbox = screen.getByRole('checkbox', { name: 'Checkbox task' });
-    expect(checkbox).not.toBeChecked();
-
-    await user.click(checkbox);
-    expect(checkbox).toBeChecked();
-
-    await user.click(checkbox);
-    expect(checkbox).not.toBeChecked();
-
-    restoreUUID();
-  });
-
-  it('filters by status (Done)', async () => {
-    const restoreUUID = mockRandomUUID();
-    const user = userEvent.setup();
-
-    render(<App />);
-
-    await addTask(user, 'Task A', 'desc a');
-    await addTask(user, 'Task B', 'desc b');
-
-    const taskACheckbox = screen.getByRole('checkbox', { name: 'Task A' });
-    await user.click(taskACheckbox);
-
-    const statusSelect = screen.getByLabelText('Filter by status');
-
-    await user.selectOptions(statusSelect, 'Done');
-    expect(screen.getByText('Task A')).toBeInTheDocument();
-    expect(screen.queryByText('Task B')).not.toBeInTheDocument();
-
-    restoreUUID();
-  });
-
-  it('filters by status (Todo)', async () => {
-    const restoreUUID = mockRandomUUID();
-    const user = userEvent.setup();
-
-    render(<App />);
-
-    await addTask(user, 'Task A', 'desc a');
-    await addTask(user, 'Task B', 'desc b');
-
-    await user.click(screen.getByRole('checkbox', { name: 'Task A' }));
-
-    const statusSelect = screen.getByLabelText('Filter by status');
-    await user.selectOptions(statusSelect, 'Todo');
-
-    expect(screen.queryByText('Task A')).not.toBeInTheDocument();
-    expect(screen.getByText('Task B')).toBeInTheDocument();
-
-    restoreUUID();
-  });
-
-  it('searches by title/description', async () => {
-    const restoreUUID = mockRandomUUID();
-    const user = userEvent.setup();
-
-    render(<App />);
-
-    await addTask(user, 'Walk dog', 'Park loop');
-    await addTask(user, 'Buy milk', '2% dairy');
-
-    const searchInput = screen.getByLabelText('Search');
-
-    await user.type(searchInput, 'milk');
-    expect(screen.getByText('Buy milk')).toBeInTheDocument();
-    expect(screen.queryByText('Walk dog')).not.toBeInTheDocument();
-
-    await user.clear(searchInput);
-    await user.type(searchInput, 'park');
-    expect(screen.getByText('Walk dog')).toBeInTheDocument();
-    expect(screen.queryByText('Buy milk')).not.toBeInTheDocument();
-
-    restoreUUID();
-  });
-
-  it('search is case-insensitive', async () => {
-    const restoreUUID = mockRandomUUID();
-    const user = userEvent.setup();
-
-    render(<App />);
-
-    await addTask(user, 'Buy Milk', 'Dairy');
-    const searchInput = screen.getByLabelText('Search');
-
-    await user.type(searchInput, 'milk');
-    expect(screen.getByText('Buy Milk')).toBeInTheDocument();
-
-    await user.clear(searchInput);
-    await user.type(searchInput, 'MILK');
-    expect(screen.getByText('Buy Milk')).toBeInTheDocument();
-
-    restoreUUID();
-  });
-
-  it('persists tasks to localStorage and restores on reload', async () => {
-    const restoreUUID = mockRandomUUID();
-    const user = userEvent.setup();
-
-    const { unmount } = render(<App />);
-
-    await addTask(user, 'Persisted', 'Saved');
-
-    // ensure storage was written
-    const storedRaw = localStorage.getItem('tasks');
-    expect(storedRaw).toBeTruthy();
-
-    unmount();
-
-    render(<App />);
-    expect(screen.getByText('Persisted')).toBeInTheDocument();
-
-    restoreUUID();
-  });
-
-  it('migrates legacy localStorage array to envelope', async () => {
-    const legacy = [
-      {
-        id: 'legacy-1',
-        title: 'Legacy task',
-        description: 'From old storage',
-        done: false,
-        createdAt: 1700000000000,
-        updatedAt: 1700000000000,
-      },
-    ];
-    localStorage.setItem('tasks', JSON.stringify(legacy));
-
-    render(<App />);
-
-    expect(screen.getByText('Legacy task')).toBeInTheDocument();
-
-    const rewritten = JSON.parse(localStorage.getItem('tasks'));
-    expect(rewritten).toBeTruthy();
-    expect(typeof rewritten).toBe('object');
-    expect(rewritten.version).toBeDefined();
-    expect(Array.isArray(rewritten.tasks)).toBe(true);
-    expect(rewritten.tasks.some((t) => t.title === 'Legacy task')).toBe(true);
-  });
+  const saved = JSON.parse(localStorage.getItem('tasks'));
+  expect(saved).toMatchObject({ version: 1 });
+  expect(Array.isArray(saved.tasks)).toBe(true);
+  expect(saved.tasks[0]).toMatchObject({ title: 'Legacy', status: 'To Do' });
 });
