@@ -24,6 +24,10 @@ export default function ConfirmDialog({ title, message, confirmLabel = 'Delete',
     }
     if (e.key !== 'Tab') return;
     const items = ref.current.querySelectorAll(FOCUSABLE);
+    if (items.length === 0) {
+      e.preventDefault();
+      return;
+    }
     const first = items[0];
     const last = items[items.length - 1];
     if (e.shiftKey && document.activeElement === first) {

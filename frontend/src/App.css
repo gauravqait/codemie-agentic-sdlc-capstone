@@ -1,7 +1,7 @@
 :root { font-family: system-ui, sans-serif; color: #1a1a1a; background: #f6f7f9; }
 body { margin: 0; }
 .app { max-width: 720px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
-h1:focus { outline: none; }
+h1:focus-visible, h1:focus { outline: 3px solid #f59e0b; outline-offset: 2px; }
 section { background: #fff; border-radius: 8px; padding: 1rem 1.25rem; margin-top: 1rem; box-shadow: 0 1px 2px #0002; }
 .field { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 0.75rem; }
 label { font-weight: 600; font-size: 0.9rem; }

@@ -27,6 +27,9 @@ export function normalizeTask(raw, nowIso) {
   };
 }
 
+const FIELDS = ['id', 'title', 'description', 'status', 'createdAt', 'updatedAt'];
+const needsMigration = (raw, normalized) => FIELDS.some((k) => raw[k] !== normalized[k]);
+
 function readRaw(storage) {
   const current = storage.getItem(STORAGE_KEY);
   if (current !== null) return { raw: current, legacy: false };
@@ -60,7 +63,7 @@ export function loadTasks(storage = globalThis.localStorage, now = new Date()) {
 
   const nowIso = now.toISOString();
   const tasks = parsed.map((r) => normalizeTask(r, nowIso)).filter(Boolean);
-  const migrated = legacy || tasks.length !== parsed.length || JSON.stringify(tasks) !== JSON.stringify(parsed);
+  const migrated = legacy || tasks.length !== parsed.length || tasks.some((t, i) => needsMigration(parsed[i], t));
   if (migrated) saveTasks(tasks, storage); // persist migrated result once
   return { tasks, error: '' };
 }
