@@ -133,6 +133,47 @@ describe('App', () => {
     expect(after.createdAt).toBe(before.createdAt);
     expect(after.updatedAt).not.toBe(before.updatedAt);
   });
+  it('shows a dismissible banner when saving fails', async () => {
+    const user = userEvent.setup();
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError');
+    });
+    render(<App />);
+    await addTask(user, 'Cannot save');
+    const banner = await screen.findByRole('alert');
+    expect(banner).toHaveTextContent(/could not be saved/i);
+    await user.click(within(banner).getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByText(/could not be saved/i)).not.toBeInTheDocument();
+    spy.mockRestore();
+  });
+
+  it('announces add, update and delete in the live region', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const live = screen.getByRole('status');
+    await addTask(user, 'Announce me');
+    expect(live).toHaveTextContent('Task "Announce me" added.');
+
+    await user.click(screen.getByRole('button', { name: 'Edit Announce me' }));
+    const input = screen.getAllByLabelText('Title')[1];
+    await user.clear(input);
+    await user.type(input, 'Announced');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(live).toHaveTextContent('Task "Announced" updated.');
+
+    await user.click(screen.getByRole('button', { name: 'Delete Announced' }));
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
+    expect(live).toHaveTextContent('Task "Announced" deleted.');
+  });
+
+  it('focuses the page heading after deleting the last task', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await addTask(user, 'Only task');
+    await user.click(screen.getByRole('button', { name: 'Delete Only task' }));
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
+    await vi.waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toHaveFocus());
+  });
 });
 
 describe('ErrorBoundary', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { loadTasks, saveTasks } from './storage';
+import { loadTasks, saveTasks, normalizeTask } from './storage';
 import { STORAGE_KEY } from '../domain/constants';
 
 const NOW = new Date('2025-03-01T00:00:00Z');
@@ -61,5 +61,26 @@ describe('saveTasks', () => {
   it('returns false instead of throwing when quota is exceeded', () => {
     const full = { setItem: vi.fn(() => { throw new Error('QuotaExceededError'); }) };
     expect(saveTasks([], full)).toBe(false);
+  });
+});
+
+describe('normalizeTask', () => {
+  const now = '2025-03-01T00:00:00.000Z';
+  it('replaces invalid dates with the migration time and keeps updatedAt >= createdAt source', () => {
+    const t = normalizeTask({ id: 'a', title: 'Task', createdAt: 'not-a-date', updatedAt: 'nope' }, now);
+    expect(t.createdAt).toBe(now);
+    expect(t.updatedAt).toBe(now);
+  });
+  it('generates an id when missing or empty', () => {
+    expect(normalizeTask({ title: 'Task' }, now).id).toBeTruthy();
+    expect(normalizeTask({ id: '', title: 'Task' }, now).id).toBeTruthy();
+  });
+  it('defaults an invalid status', () => {
+    expect(normalizeTask({ title: 'Task', status: 'bad' }, now).status).toBe('todo');
+  });
+  it('rejects records without a usable title', () => {
+    expect(normalizeTask(null, now)).toBeNull();
+    expect(normalizeTask({ title: '   ' }, now)).toBeNull();
+    expect(normalizeTask({ title: 5 }, now)).toBeNull();
   });
 });
