@@ -1,0 +1,4 @@
+# CodeMie local config and analytics (machine/user specific)
+.codemie/
+docs/codemie/
+.claude/worktrees/
