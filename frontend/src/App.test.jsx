@@ -120,6 +120,61 @@ describe('App', () => {
     }
   });
 
+  it('undoes with Ctrl+Z without tabbing to the button', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await addTask(user, 'Keyboard undo');
+    await user.click(screen.getByRole('button', { name: 'Delete Keyboard undo' }));
+    await user.keyboard('{Control>}z{/Control}');
+    expect(screen.getByRole('heading', { name: 'Keyboard undo' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
+  });
+
+  it('dismisses the snackbar with Esc while focused on it', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await addTask(user, 'Esc test');
+    await user.click(screen.getByRole('button', { name: 'Delete Esc test' }));
+    screen.getByRole('button', { name: 'Undo' }).focus();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Esc test' })).not.toBeInTheDocument();
+  });
+
+  it('keeps only the latest delete undoable', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await addTask(user, 'Older');
+    await addTask(user, 'Newer');
+    await user.click(screen.getByRole('button', { name: 'Delete Newer' }));
+    await user.click(screen.getByRole('button', { name: 'Delete Older' }));
+    await user.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(screen.getByRole('heading', { name: 'Older' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Newer' })).not.toBeInTheDocument();
+  });
+
+  it('pauses the undo timer while the snackbar is hovered', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<App />);
+      await addTask(user, 'Hover pause');
+      await user.click(screen.getByRole('button', { name: 'Delete Hover pause' }));
+      await user.hover(screen.getByRole('button', { name: 'Undo' }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS * 2);
+      });
+      expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
+      await user.unhover(screen.getByRole('button', { name: 'Undo' }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS + 100);
+      });
+      expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('moves focus to the next task after deleting', async () => {
     const user = userEvent.setup();
     render(<App />);

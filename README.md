@@ -1,6 +1,6 @@
 # Task Manager
 
-A small React task manager built from the [KAN implementation plan](implementation_plan.md): search and status filter, validated forms, timestamps with safe `localStorage` migration, an undo-able delete (5-second snackbar), and keyboard/screen-reader support.
+A small React task manager built from the [KAN implementation plan](implementation_plan.md): search and status filter, validated forms, timestamps with safe `localStorage` migration, an undo-able delete (snackbar + Ctrl/Cmd+Z), and keyboard/screen-reader support.
 
 ## Prerequisites
 
@@ -29,7 +29,7 @@ CI (`.github/workflows/ci.yml`) runs exactly `npm ci`, `lint`, `test`, `build` i
 - **Add / edit**: title is required (3-100 characters after trimming); description is optional. Errors appear next to the field and are announced to screen readers. Press `Esc` to cancel an edit.
 - **Search**: case-insensitive "contains" match on title and description.
 - **Filter**: by status (All, To do, In progress, Done). Search and filter combine with AND. "Clear filters" resets both.
-- **Delete**: removes the task immediately and shows an "Undo" snackbar for 5 seconds; Undo restores the task at its original position and focuses it. After a delete, focus moves to the next task (or the page heading if the list is empty).
+- **Delete**: removes the task immediately and shows an "Undo" snackbar for 8 seconds (the timer pauses while you hover or focus it; `Ctrl/Cmd+Z` also undoes). Only the most recent delete can be undone; Undo restores the task at its original position and focuses it. After a delete, focus moves to the next task (or the page heading if the list is empty).
 - **Timestamps**: every task has `createdAt` and `updatedAt` (ISO-8601). Any edit, including a status change, updates `updatedAt`.
 
 ## Data and migration
@@ -42,14 +42,14 @@ Tasks live in `localStorage` under `task-manager.tasks.v2`. Older data (keys `ta
 2. Submit an empty title; see the inline error and focus return to the field.
 3. Search for a word from the description; the list narrows. Pick a status filter; the list narrows further.
 4. Edit the task and change its status; "Updated" time appears.
-5. Delete it with the keyboard only (Tab to Delete, Enter); focus moves on. Tab to "Undo" within 5 seconds to restore it.
+5. Delete it with the keyboard only (Tab to Delete, Enter); focus moves on. Press `Ctrl+Z` to restore it.
 
 ## Manual accessibility checklist
 
 - Every control is reachable with Tab and has a visible focus outline.
 - Submitting an empty/invalid title focuses the Title field; the error is read out and linked via `aria-describedby`.
 - Opening Edit focuses the Title field; Esc cancels and focus returns to Edit.
-- Deleting announces "deleted. Undo available."; Undo announces "restored." and focuses the task.
+- Deleting announces "deleted. Undo available."; Ctrl/Cmd+Z undoes without Tabbing; Undo announces "restored." and focuses the task.
 
 ## Troubleshooting
 
